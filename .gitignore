@@ -1,0 +1,7 @@
+# scratch and test output
+*.log
+*.tmp
+.DS_Store
+/tmp/
+/out/
+*.tar.gz
