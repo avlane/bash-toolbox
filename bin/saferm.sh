@@ -10,13 +10,13 @@ if [ $# -eq 0 ]; then
     exit 2
 fi
 
-mkdir -p $TRASH
+mkdir -p "$TRASH"
 
-for f in $@; do
-    if [ ! -e $f ]; then
-        echo "saferm.sh: $f: no such file"
+for f in "$@"; do
+    if [ ! -e "$f" ]; then
+        echo "saferm.sh: $f: no such file" >&2
         continue
     fi
-    mv $f $TRASH/`basename $f`.`date +%s`
+    mv "$f" "$TRASH/`basename "$f"`.`date +%s`"
     echo "moved $f to trash"
 done
