@@ -7,9 +7,14 @@
 THRESHOLD=${1:-90}
 status=0
 
-df -P | tail -n +2 | while read fs blocks used avail pct mount; do
-    num=`echo $pct | tr -d '%'`
-    if [ "$num" -ge "$THRESHOLD" ]; then
+# process substitution instead of a pipe: a piped while loop runs in a
+# subshell, so "status" was never updated and the script always exited 0
+while read -r fs blocks used avail pct mount; do
+    num=${pct%\%}
+    if [[ "$num" -ge "$THRESHOLD" ]]; then
         echo "WARNING: $mount is at $pct ($fs)"
+        status=1
     fi
-done
+done < <(df -P | tail -n +2)
+
+exit $status
