@@ -15,6 +15,6 @@ while read -r fs blocks used avail pct mount; do
         echo "WARNING: $mount is at $pct ($fs)"
         status=1
     fi
-done < <(df -P | tail -n +2)
+done < <(${DF_CMD:-df -P} | tail -n +2)
 
 exit $status
