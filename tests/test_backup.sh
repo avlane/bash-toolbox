@@ -22,4 +22,24 @@ test_usage() {
     assert_status 2 "wrong arg count" "$ROOT/bin/backup.sh" onlyone
 }
 
+test_exclude_pattern() {
+    mkdir -p "$WORK/ex/proj"
+    echo keep > "$WORK/ex/proj/keep.txt"
+    echo skip > "$WORK/ex/proj/skip.log"
+    out=$("$ROOT/bin/backup.sh" -x '*.log' "$WORK/ex/proj" "$WORK/exdest")
+    archive=${out#wrote }
+    assert_eq "proj/keep.txt" "$(tar -tzf "$archive" | grep -v '/$')" "only keep.txt archived"
+}
+
+test_dry_run_writes_nothing() {
+    mkdir -p "$WORK/dr/proj"
+    out=$("$ROOT/bin/backup.sh" -n "$WORK/dr/proj" "$WORK/drdest")
+    assert_eq "no" "$([ -e "$WORK/drdest" ] && echo yes || echo no)" "dest not created"
+    assert_eq "would write" "${out%% $WORK*}" "reports what it would do"
+}
+
+test_help() {
+    assert_status 0 "--help exits 0" "$ROOT/bin/backup.sh" --help
+}
+
 run_tests
