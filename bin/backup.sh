@@ -7,13 +7,14 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: backup.sh [-n] [-x PATTERN]... SOURCE_DIR DEST_DIR
+usage: backup.sh [-n] [-k COUNT] [-x PATTERN]... SOURCE_DIR DEST_DIR
 
 Create DEST_DIR/NAME-YYYYmmdd-HHMMSS.tar.gz from SOURCE_DIR. The archive is
 written to a temporary file first and renamed, so a failed run never leaves a
 half-written archive behind.
 
 options:
+  -k COUNT    afterwards keep only the newest COUNT archives for this source
   -x PATTERN  exclude paths matching PATTERN (repeatable, passed to tar)
   -n          dry run: say what would be written, change nothing
   -h, --help  show this help
@@ -23,9 +24,11 @@ USAGE
 tb_handle_help usage "$@"
 
 dry=0
+keep=0
 excludes=()
-while getopts ':x:nh' opt; do
+while getopts ':x:k:nh' opt; do
     case $opt in
+        k) keep=$OPTARG ;;
         x) excludes+=(--exclude "$OPTARG") ;;
         n) dry=1 ;;
         h) usage; exit 0 ;;
@@ -35,6 +38,7 @@ while getopts ':x:nh' opt; do
 done
 shift $((OPTIND - 1))
 
+[[ $keep =~ ^[0-9]+$ ]] || tb_usage_error "-k needs a number"
 [[ $# -eq 2 ]] || tb_usage_error "expected SOURCE_DIR and DEST_DIR"
 
 src=${1%/}
@@ -56,3 +60,15 @@ trap 'rm -f "$tmp"' EXIT
 tar -czf "$tmp" ${excludes[@]+"${excludes[@]}"} -C "$(dirname "$src")" "$name"
 mv "$tmp" "$archive"
 echo "wrote $archive"
+
+if (( keep > 0 )); then
+    n=0
+    # newest first; the names are the ones generated above, so parsing ls is safe
+    while IFS= read -r old; do
+        n=$((n + 1))
+        if (( n > keep )); then
+            rm -f -- "$old"
+            echo "removed $old"
+        fi
+    done < <(ls -1t "$dest/$name"-*.tar.gz)
+fi

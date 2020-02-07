@@ -42,4 +42,18 @@ test_help() {
     assert_status 0 "--help exits 0" "$ROOT/bin/backup.sh" --help
 }
 
+test_keep_prunes_old_archives() {
+    mkdir -p "$WORK/kp/proj" "$WORK/kpdest"
+    for d in 201901010000 201902010000 201903010000; do
+        touch -t "$d" "$WORK/kpdest/proj-$d.tar.gz"
+    done
+    "$ROOT/bin/backup.sh" -k 2 "$WORK/kp/proj" "$WORK/kpdest" >/dev/null
+    assert_eq "2" "$(ls "$WORK/kpdest" | wc -l | tr -d ' ')" "two archives remain"
+    assert_eq "no" "$([ -e "$WORK/kpdest/proj-201901010000.tar.gz" ] && echo yes || echo no)" "oldest removed"
+}
+
+test_keep_must_be_numeric() {
+    assert_status 2 "-k abc is a usage error" "$ROOT/bin/backup.sh" -k abc "$WORK" "$WORK/x"
+}
+
 run_tests
