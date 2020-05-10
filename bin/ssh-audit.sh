@@ -14,6 +14,8 @@ Checks, in SSH_DIR (default ~/.ssh):
   - private keys are not accessible by group or others
   - private keys without a passphrase (reported as a warning)
   - weak keys: DSA, or RSA smaller than 2048 bits
+  - duplicate entries in authorized_keys
+  - known_hosts entries that are not hashed
 
 Prints one line per finding. Exit status is 1 if anything was found, else 0.
 
@@ -87,6 +89,27 @@ for key in "$dir"/*; do
         esac
     fi
 done
+
+# authorized_keys: the same key listed twice is clutter at best
+auth=$dir/authorized_keys
+if [[ -f $auth ]]; then
+    dups=$(awk '
+        /^[[:space:]]*(#|$)/ { next }
+        { for (i = 1; i < NF; i++) if ($i ~ /^(ssh-|ecdsa-|sk-)/) { print $(i + 1); break } }
+    ' "$auth" | sort | uniq -d)
+    if [[ -n $dups ]]; then
+        finding "$auth" "contains duplicate keys ($(echo "$dups" | wc -l | tr -d ' ') distinct)"
+    fi
+fi
+
+# known_hosts: hashed entries (|1|...) hide host names from anyone who reads the file
+known=$dir/known_hosts
+if [[ -f $known ]]; then
+    plain=$(grep -c -v -e '^|1|' -e '^[[:space:]]*#' -e '^[[:space:]]*$' "$known" || true)
+    if (( plain > 0 )); then
+        finding "$known" "$plain host entries are not hashed (ssh-keygen -H -f $known)"
+    fi
+fi
 
 (( findings == 0 )) || exit 1
 echo "no findings in $dir"
