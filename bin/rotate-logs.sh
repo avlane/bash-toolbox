@@ -50,12 +50,13 @@ rotate_one() {
         return 0
     fi
     rm -f -- "$f.$keep"
-    i=1
-    while (( i < keep )); do
+    # shift from the highest number down, otherwise each mv overwrites the next
+    i=$((keep - 1))
+    while (( i >= 1 )); do
         if [[ -e $f.$i ]]; then
             mv -- "$f.$i" "$f.$((i + 1))"
         fi
-        i=$((i + 1))
+        i=$((i - 1))
     done
     cp -p -- "$f" "$f.1"
     : > "$f"
