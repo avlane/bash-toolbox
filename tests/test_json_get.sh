@@ -5,8 +5,6 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/json-test.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 
-command -v jq >/dev/null || { echo "jq not found, skipping"; exit 0; }
-
 cat > "$WORK/doc.json" <<'JSON'
 {"name": "box", "port": 8080, "debug": false, "server": {"host": "db01", "port": 5432}}
 JSON
@@ -27,8 +25,28 @@ test_missing_key_fails() {
     assert_status 1 "missing key" "$ROOT/bin/json-get.sh" nothere "$WORK/doc.json"
 }
 
+test_false_is_exit_1() {
+    assert_status 1 "false behaves like jq -e" "$ROOT/bin/json-get.sh" debug "$WORK/doc.json"
+    assert_eq "false" "$("$ROOT/bin/json-get.sh" debug "$WORK/doc.json" || true)" "false is still printed"
+}
+
+test_quoted_string_without_raw() {
+    assert_eq '"box"' "$("$ROOT/bin/json-get.sh" name "$WORK/doc.json")" "string keeps quotes"
+}
+
 test_usage() {
     assert_status 2 "no key" "$ROOT/bin/json-get.sh"
 }
 
-run_tests
+# run everything with jq (if installed) and again with the bash fallback
+rc=0
+if command -v jq >/dev/null; then
+    echo "[jq]"
+    run_tests || rc=1
+else
+    echo "jq not found, skipping the jq pass"
+fi
+export TB_NO_JQ=1
+echo "[bash fallback]"
+run_tests || rc=1
+exit $rc
