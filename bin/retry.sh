@@ -46,8 +46,12 @@ for n in "$tries" "$delay" "$maxdelay"; do
 done
 
 attempt=1
+started=$(tb_now)
 while true; do
     if "$@"; then
+        if (( attempt > 1 )); then
+            tb_log "succeeded on attempt $attempt after $(( $(tb_now) - started ))s"
+        fi
         exit 0
     else
         status=$?

@@ -51,3 +51,13 @@ tb_require_cmd() {
 tb_bash_at_least() {
     (( BASH_VERSINFO[0] > $1 || (BASH_VERSINFO[0] == $1 && BASH_VERSINFO[1] >= $2) ))
 }
+
+# tb_now - seconds since the epoch. bash 5 provides EPOCHSECONDS, which saves a
+# fork of date; older shells (including macOS /bin/bash 3.2) fall back to date.
+tb_now() {
+    if [[ -n ${EPOCHSECONDS:-} ]]; then
+        printf '%s\n' "$EPOCHSECONDS"
+    else
+        date +%s
+    fi
+}
