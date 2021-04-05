@@ -21,6 +21,15 @@ if [ -n "${STUB_FAIL:-}" ] && [ "$STUB_FAIL" = "$db" ]; then exit 1; fi
 echo "dump of $db" > "$out"
 STUB
 chmod +x "$WORK/bin/pg_dump"
+cat > "$WORK/bin/mysqldump" <<'STUB'
+#!/bin/bash
+echo "$@" >> "$STUB_LOG"
+db=
+for a in "$@"; do db=$a; done
+if [ -n "${STUB_FAIL:-}" ] && [ "$STUB_FAIL" = "$db" ]; then exit 1; fi
+echo "-- dump of $db"
+STUB
+chmod +x "$WORK/bin/mysqldump"
 export PATH="$WORK/bin:$PATH"
 export STUB_LOG="$WORK/calls"
 
@@ -59,6 +68,21 @@ test_pg_retention() {
 test_pg_dry_run() {
     "$ROOT/bin/db-backup-postgres.sh" -n "$WORK/pg5" app >/dev/null
     assert_eq "no" "$([ -e "$WORK/pg5" ] && echo yes || echo no)" "dry run creates nothing"
+}
+
+test_mysql_writes_gzip_dump() {
+    : > "$STUB_LOG"
+    "$ROOT/bin/db-backup-mysql.sh" -u backup "$WORK/my" shop >/dev/null
+    f=$(ls "$WORK/my"/shop-*.sql.gz)
+    assert_eq "-- dump of shop" "$(gzip -dc "$f")" "dump content is gzipped"
+    assert_eq "--user=backup --single-transaction --routines --triggers shop" "$(cat "$STUB_LOG")" "mysqldump flags"
+}
+
+test_mysql_failed_dump() {
+    export STUB_FAIL=bad
+    assert_status 1 "failed dump gives exit 1" "$ROOT/bin/db-backup-mysql.sh" "$WORK/my2" bad
+    unset STUB_FAIL
+    assert_eq "0" "$(ls -A "$WORK/my2" | wc -l | tr -d ' ')" "no partial file left"
 }
 
 run_tests
