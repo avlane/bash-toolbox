@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: db-backup-mysql.sh [-H HOST] [-P PORT] [-u USER] [-p PASSWORD] [-k KEEP] [-n] DEST_DIR DATABASE...
+usage: db-backup-mysql.sh [-H HOST] [-P PORT] [-u USER] [-k KEEP] [-n] DEST_DIR DATABASE...
 
 Dump each DATABASE with mysqldump (--single-transaction, so InnoDB tables are
 consistent without locking) and gzip it to
@@ -17,24 +17,26 @@ options:
   -H HOST      server host
   -P PORT      server port
   -u USER      user name
-  -p PASSWORD  password
   -k KEEP      keep only the newest KEEP dumps per database (default 7, 0 = keep all)
   -n           dry run
   -h, --help   show this help
+
+The password is not accepted as an option, because it would be visible in the
+process list. Put it in ~/.my.cnf, or export MYSQL_BACKUP_PASSWORD and the script
+hands it to mysqldump through a private temporary option file.
 USAGE
 }
 
 tb_handle_help usage "$@"
 
-host= port= user= password=
+host= port= user=
 keep=7
 dry=0
-while getopts ':H:P:u:p:k:nh' opt; do
+while getopts ':H:P:u:k:nh' opt; do
     case $opt in
         H) host=$OPTARG ;;
         P) port=$OPTARG ;;
         u) user=$OPTARG ;;
-        p) password=$OPTARG ;;
         k) keep=$OPTARG ;;
         n) dry=1 ;;
         h) usage; exit 0 ;;
@@ -49,11 +51,21 @@ shift $((OPTIND - 1))
 dest=$1
 shift
 
+cnf=
+trap '[[ -z $cnf ]] || rm -f "$cnf"' EXIT
+defaults=()
+if [[ -n ${MYSQL_BACKUP_PASSWORD:-} ]]; then
+    cnf=$(mktemp "${TMPDIR:-/tmp}/mysql-backup.XXXXXX")   # mktemp creates it mode 0600
+    pw=${MYSQL_BACKUP_PASSWORD//\\/\\\\}
+    pw=${pw//\"/\\\"}
+    printf '[client]\npassword="%s"\n' "$pw" > "$cnf"
+    defaults=(--defaults-extra-file="$cnf")   # must be the first mysqldump option
+fi
+
 conn=()
 [[ -z $host ]] || conn+=(--host="$host")
 [[ -z $port ]] || conn+=(--port="$port")
 [[ -z $user ]] || conn+=(--user="$user")
-[[ -z $password ]] || conn+=(--password="$password")
 
 tb_require_cmd mysqldump gzip
 
@@ -78,7 +90,7 @@ for db in "$@"; do
     fi
     mkdir -p "$dest"
     tmp=$(mktemp "$dest/.mysqldump.XXXXXX")
-    if mysqldump ${conn[@]+"${conn[@]}"} --single-transaction --routines --triggers "$db" | gzip > "$tmp"; then
+    if mysqldump ${defaults[@]+"${defaults[@]}"} ${conn[@]+"${conn[@]}"} --single-transaction --routines --triggers "$db" | gzip > "$tmp"; then
         mv "$tmp" "$out"
         echo "wrote $out"
         prune "$db"

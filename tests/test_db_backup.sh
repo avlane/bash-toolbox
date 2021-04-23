@@ -23,6 +23,9 @@ STUB
 chmod +x "$WORK/bin/pg_dump"
 cat > "$WORK/bin/mysqldump" <<'STUB'
 #!/bin/bash
+case $1 in
+    --defaults-extra-file=*) cat "${1#*=}" > "$STUB_LOG.cnf"; shift; echo "defaults-file" >> "$STUB_LOG" ;;
+esac
 echo "$@" >> "$STUB_LOG"
 db=
 for a in "$@"; do db=$a; done
@@ -76,6 +79,17 @@ test_mysql_writes_gzip_dump() {
     f=$(ls "$WORK/my"/shop-*.sql.gz)
     assert_eq "-- dump of shop" "$(gzip -dc "$f")" "dump content is gzipped"
     assert_eq "--user=backup --single-transaction --routines --triggers shop" "$(cat "$STUB_LOG")" "mysqldump flags"
+}
+
+test_mysql_password_goes_through_option_file() {
+    : > "$STUB_LOG"
+    MYSQL_BACKUP_PASSWORD='p"w\d' "$ROOT/bin/db-backup-mysql.sh" "$WORK/my3" shop >/dev/null
+    assert_eq "defaults-file" "$(head -n 1 "$STUB_LOG")" "option file is the first argument"
+    assert_eq 'password="p\"w\\d"' "$(sed -n 2p "$STUB_LOG.cnf")" "password is escaped"
+    case $(cat "$STUB_LOG") in
+        *'p"w'*) assert_eq "no password in arguments" "leaked" "password is not on the command line" ;;
+        *) assert_eq 1 1 "password is not on the command line" ;;
+    esac
 }
 
 test_mysql_failed_dump() {
