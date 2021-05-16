@@ -28,4 +28,41 @@ test_exit_status_when_ok() {
     assert_status 0 "under threshold exits 0" "$ROOT/bin/disk-alert.sh" 99
 }
 
+# inode output in the two layouts we know: macOS first, then GNU
+cat > "$WORK/fake-dfi-mac" <<'FAKE'
+#!/bin/bash
+echo "Filesystem 512-blocks Used Available Capacity iused ifree %iused Mounted on"
+echo "/dev/disk1 1000 500 500 50% 100 900 10% /"
+echo "/dev/disk3 1000 100 900 10% 990 10 99% /Volumes/My Disk"
+FAKE
+cat > "$WORK/fake-dfi-gnu" <<'FAKE'
+#!/bin/bash
+echo "Filesystem Inodes IUsed IFree IUse% Mounted on"
+echo "/dev/sda1 1000 100 900 10% /"
+echo "/dev/sdb1 1000 970 30 97% /var"
+echo "tmpfs 0 0 0 - /dev"
+FAKE
+chmod +x "$WORK/fake-dfi-mac" "$WORK/fake-dfi-gnu"
+
+test_inode_usage_macos_layout() {
+    export DFI_CMD="$WORK/fake-dfi-mac"
+    out=$("$ROOT/bin/disk-alert.sh" -i 95 99 || true)
+    assert_eq "WARNING: /Volumes/My Disk has used 99% of its inodes (/dev/disk3)" "$out" "mount names with spaces survive"
+}
+
+test_inode_usage_gnu_layout() {
+    export DFI_CMD="$WORK/fake-dfi-gnu"
+    out=$("$ROOT/bin/disk-alert.sh" -i 95 99 || true)
+    assert_eq "WARNING: /var has used 97% of its inodes (/dev/sdb1)" "$out" "GNU layout, dash rows ignored"
+}
+
+test_inodes_are_opt_in() {
+    export DFI_CMD="$WORK/fake-dfi-gnu"
+    assert_status 0 "no -i means no inode check" "$ROOT/bin/disk-alert.sh" 99
+}
+
+test_bad_threshold() {
+    assert_status 2 "non numeric threshold" "$ROOT/bin/disk-alert.sh" lots
+}
+
 run_tests
