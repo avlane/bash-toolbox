@@ -61,6 +61,19 @@ test_inodes_are_opt_in() {
     assert_status 0 "no -i means no inode check" "$ROOT/bin/disk-alert.sh" 99
 }
 
+test_per_mount_override() {
+    printf '# data is expected to be full\n\n/data 99\n' > "$WORK/limits"
+    assert_status 0 "/data override raises its limit" "$ROOT/bin/disk-alert.sh" -c "$WORK/limits" 90
+    printf '/data 50\n' > "$WORK/limits"
+    assert_status 1 "an override can also lower it" "$ROOT/bin/disk-alert.sh" -c "$WORK/limits" 99
+}
+
+test_bad_override_file() {
+    printf '/data lots\n' > "$WORK/limits"
+    assert_status 1 "bad line is an error" "$ROOT/bin/disk-alert.sh" -c "$WORK/limits"
+    assert_status 1 "missing file is an error" "$ROOT/bin/disk-alert.sh" -c "$WORK/nope"
+}
+
 test_bad_threshold() {
     assert_status 2 "non numeric threshold" "$ROOT/bin/disk-alert.sh" lots
 }
