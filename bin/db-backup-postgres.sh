@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: db-backup-postgres.sh [-H HOST] [-p PORT] [-U USER] [-k KEEP] [-n] DEST_DIR DATABASE...
+usage: db-backup-postgres.sh [-H HOST] [-p PORT] [-U USER] [-k KEEP] [-V] [-n] DEST_DIR DATABASE...
 
 Dump each DATABASE with pg_dump in custom format (restore with pg_restore) to
 DEST_DIR/DATABASE-YYYYmmdd-HHMMSS.dump. A dump is written to a temporary file
@@ -18,6 +18,7 @@ options:
   -p PORT     server port
   -U USER     role to connect as
   -k KEEP     keep only the newest KEEP dumps per database (default 7, 0 = keep all)
+  -V          verify each dump by listing it with pg_restore --list
   -n          dry run
   -h, --help  show this help
 
@@ -28,14 +29,16 @@ USAGE
 tb_handle_help usage "$@"
 
 host= port= user=
+verify=0
 keep=7
 dry=0
-while getopts ':H:p:U:k:nh' opt; do
+while getopts ':H:p:U:k:Vnh' opt; do
     case $opt in
         H) host=$OPTARG ;;
         p) port=$OPTARG ;;
         U) user=$OPTARG ;;
         k) keep=$OPTARG ;;
+        V) verify=1 ;;
         n) dry=1 ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
@@ -55,6 +58,9 @@ conn=()
 [[ -z $user ]] || conn+=(-U "$user")
 
 tb_require_cmd pg_dump
+if (( verify )); then
+    tb_require_cmd pg_restore
+fi
 
 prune() {
     local db=$1 n=0 old
@@ -77,13 +83,14 @@ for db in "$@"; do
     fi
     mkdir -p "$dest"
     tmp=$(mktemp "$dest/.pgdump.XXXXXX")
-    if pg_dump ${conn[@]+"${conn[@]}"} -Fc -f "$tmp" "$db"; then
+    if pg_dump ${conn[@]+"${conn[@]}"} -Fc -f "$tmp" "$db" &&
+        { (( ! verify )) || pg_restore --list "$tmp" >/dev/null; }; then
         mv "$tmp" "$out"
         echo "wrote $out"
         prune "$db"
     else
         rm -f "$tmp"
-        tb_log "dump of $db failed"
+        tb_log "dump of $db failed (or did not verify)"
         status=1
     fi
 done

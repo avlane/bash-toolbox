@@ -21,6 +21,12 @@ if [ -n "${STUB_FAIL:-}" ] && [ "$STUB_FAIL" = "$db" ]; then exit 1; fi
 echo "dump of $db" > "$out"
 STUB
 chmod +x "$WORK/bin/pg_dump"
+cat > "$WORK/bin/pg_restore" <<'STUB'
+#!/bin/bash
+echo "pg_restore $*" >> "$STUB_LOG"
+[ -z "${STUB_RESTORE_FAIL:-}" ]
+STUB
+chmod +x "$WORK/bin/pg_restore"
 cat > "$WORK/bin/mysqldump" <<'STUB'
 #!/bin/bash
 case $1 in
@@ -66,6 +72,19 @@ test_pg_retention() {
     done
     "$ROOT/bin/db-backup-postgres.sh" -k 2 "$WORK/pg4" app >/dev/null
     assert_eq "2" "$(ls "$WORK/pg4" | wc -l | tr -d ' ')" "newest two remain"
+}
+
+test_pg_verify() {
+    : > "$STUB_LOG"
+    assert_status 0 "verified dump succeeds" "$ROOT/bin/db-backup-postgres.sh" -V "$WORK/pg6" app
+    case $(cat "$STUB_LOG") in
+        *"pg_restore --list "*) assert_eq 1 1 "pg_restore --list was run" ;;
+        *) assert_eq "pg_restore --list" "$(cat "$STUB_LOG")" "pg_restore --list was run" ;;
+    esac
+    export STUB_RESTORE_FAIL=1
+    assert_status 1 "unreadable dump fails" "$ROOT/bin/db-backup-postgres.sh" -V "$WORK/pg7" app
+    unset STUB_RESTORE_FAIL
+    assert_eq "0" "$(ls -A "$WORK/pg7" | wc -l | tr -d ' ')" "unverified dump is not kept"
 }
 
 test_pg_dry_run() {
