@@ -24,4 +24,26 @@ test_usage_error() {
     assert_status 2 "no arguments is a usage error" "$ROOT/bin/saferm.sh"
 }
 
+test_purge_old_entries_only() {
+    rm -rf "$SAFERM_TRASH"; mkdir -p "$SAFERM_TRASH"
+    now=$(date +%s)
+    echo old > "$SAFERM_TRASH/old.txt.$((now - 40 * 86400))"
+    echo new > "$SAFERM_TRASH/new.txt.$((now - 2 * 86400))"
+    mkdir "$SAFERM_TRASH/olddir.$((now - 90 * 86400))"
+    echo x > "$SAFERM_TRASH/no-timestamp"
+    "$ROOT/bin/saferm.sh" -P 30 >/dev/null
+    assert_eq "new.txt.$((now - 2 * 86400))
+no-timestamp" "$(ls "$SAFERM_TRASH")" "only entries older than 30 days are purged"
+}
+
+test_dry_run_moves_nothing() {
+    echo keep > "$WORK/keep.txt"
+    "$ROOT/bin/saferm.sh" -n "$WORK/keep.txt" >/dev/null
+    assert_eq "keep" "$(cat "$WORK/keep.txt")" "file still there after dry run"
+}
+
+test_missing_file_is_nonzero() {
+    assert_status 1 "missing file" "$ROOT/bin/saferm.sh" "$WORK/not-there"
+}
+
 run_tests
