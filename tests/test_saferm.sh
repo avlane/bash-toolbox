@@ -46,4 +46,15 @@ test_missing_file_is_nonzero() {
     assert_status 1 "missing file" "$ROOT/bin/saferm.sh" "$WORK/not-there"
 }
 
+test_same_name_twice_in_one_second() {
+    rm -rf "$SAFERM_TRASH"
+    mkdir -p "$WORK/d1" "$WORK/d2"
+    echo first > "$WORK/d1/notes.txt"
+    echo second > "$WORK/d2/notes.txt"
+    "$ROOT/bin/saferm.sh" "$WORK/d1/notes.txt" "$WORK/d2/notes.txt"
+    assert_eq "2" "$(ls "$SAFERM_TRASH" | wc -l | tr -d ' ')" "both files survive in the trash"
+    assert_eq "first
+second" "$(cat "$SAFERM_TRASH"/* | sort)" "contents intact"
+}
+
 run_tests

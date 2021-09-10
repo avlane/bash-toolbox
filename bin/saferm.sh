@@ -11,7 +11,7 @@ usage: saferm.sh [-n] [-v] FILE...
        saferm.sh -P DAYS
 
 Move each FILE (or directory) into the trash directory, $SAFERM_TRASH or
-~/.saferm-trash, as NAME.EPOCHSECONDS. Nothing is ever deleted by the first
+~/.saferm-trash, as NAME.EPOCHSECONDS (plus .N if that name is taken). Nothing is ever deleted by the first
 form, so a mistake can be undone with mv.
 
 options:
@@ -44,11 +44,13 @@ if [[ -n $purge ]]; then
     [[ $purge =~ ^[0-9]+$ ]] || tb_usage_error "-P needs a number of days"
     [[ $# -eq 0 ]] || tb_usage_error "-P does not take file names"
     [[ -d $trash ]] || exit 0
+    # NAME.EPOCHSECONDS, with an optional .N added when that name was taken
+    stamp_re='\.([0-9]{9,})(\.[0-9]+)?$'
     cutoff=$(( $(tb_now) - purge * 86400 ))
     for entry in "$trash"/*; do
         [[ -e $entry || -L $entry ]] || continue
-        stamp=${entry##*.}
-        [[ $stamp =~ ^[0-9]+$ ]] || continue
+        [[ $entry =~ $stamp_re ]] || continue
+        stamp=${BASH_REMATCH[1]}
         if (( stamp < cutoff )); then
             if (( dry )); then
                 echo "would delete $entry"
@@ -72,6 +74,11 @@ for f in "$@"; do
         continue
     fi
     target="$trash/$(basename "$f").$(tb_now)"
+    n=1
+    while [[ -e $target || -L $target ]]; do
+        target="$trash/$(basename "$f").$(tb_now).$n"
+        n=$((n + 1))
+    done
     if (( dry )); then
         echo "would move $f to $target"
         continue
