@@ -61,3 +61,19 @@ tb_now() {
         date +%s
     fi
 }
+
+# tb_readlines ARRAY_NAME - read standard input into the named array, one line
+# per element. bash 4+ has mapfile; the macOS shell (3.2) does not, so there it
+# is a read loop. Usage: tb_readlines files < <(find . -name '*.log')
+tb_readlines() {
+    local __name=$1 __line
+    [[ $__name =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || tb_die "tb_readlines: bad array name: $__name"
+    if tb_bash_at_least 4 0; then
+        mapfile -t "$__name"
+    else
+        eval "$__name=()"
+        while IFS= read -r __line || [[ -n $__line ]]; do
+            eval "$__name+=(\"\$__line\")"
+        done
+    fi
+}

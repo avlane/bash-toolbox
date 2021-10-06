@@ -30,4 +30,21 @@ test_bash_at_least() {
     assert_status 1 "bash is not 99.0" tb_bash_at_least 99 0
 }
 
+test_readlines_keeps_spaces_and_blank_lines() {
+    tb_readlines rows < <(printf 'one\ntwo words\n\nlast without newline')
+    assert_eq "4" "${#rows[@]}" "four elements"
+    assert_eq "two words" "${rows[1]}" "spaces kept"
+    assert_eq "" "${rows[2]}" "blank line kept"
+    assert_eq "last without newline" "${rows[3]}" "unterminated last line kept"
+}
+
+test_readlines_empty_input() {
+    tb_readlines rows < /dev/null
+    assert_eq "0" "${#rows[@]}" "empty input gives an empty array"
+}
+
+test_readlines_rejects_bad_name() {
+    assert_status 1 "bad array name" bash -c '. "$1"; tb_readlines "a b" </dev/null' _ "$ROOT/lib/common.sh"
+}
+
 run_tests
