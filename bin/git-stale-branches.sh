@@ -1,17 +1,69 @@
-#!/bin/bash
-# git-stale-branches.sh - list local branches with no commits for N days
-# usage: git-stale-branches.sh [DAYS] [REPO]
+#!/usr/bin/env bash
+# git-stale-branches.sh - report local branches nobody has touched for a while
+set -euo pipefail
 
-DAYS=${1:-90}
-REPO=${2:-.}
+# shellcheck source=../lib/common.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/../lib/common.sh"
 
-cd "$REPO" || exit 1
+usage() {
+    cat <<'USAGE'
+usage: git-stale-branches.sh [-d DAYS] [-m BASE] [-s] [REPO]
 
-limit=`date -v-${DAYS}d +%s 2>/dev/null || date -d "$DAYS days ago" +%s`
+List local branches whose last commit is at least DAYS days old (default 90),
+oldest first, as "date  author  branch". The current branch is never listed.
 
-git for-each-ref --format='%(committerdate:unix) %(refname:short)' refs/heads |
-while read ts name; do
-    if [ "$ts" -lt "$limit" ]; then
-        echo "$name (last commit `date -r $ts +%Y-%m-%d 2>/dev/null || date -d @$ts +%Y-%m-%d`)"
-    fi
+options:
+  -d DAYS     age threshold in days
+  -m BASE     only branches already merged into BASE (for example main)
+  -s          also print a count of stale branches per author
+  -h, --help  show this help
+USAGE
+}
+
+tb_handle_help usage "$@"
+
+days=90
+base=
+summary=0
+while getopts ':d:m:sh' opt; do
+    case $opt in
+        d) days=$OPTARG ;;
+        m) base=$OPTARG ;;
+        s) summary=1 ;;
+        h) usage; exit 0 ;;
+        :) tb_usage_error "option -$OPTARG needs an argument" ;;
+        *) tb_usage_error "unknown option -$OPTARG" ;;
+    esac
 done
+shift $((OPTIND - 1))
+
+[[ $days =~ ^[0-9]+$ ]] || tb_usage_error "-d needs a number"
+repo=${1:-.}
+tb_require_cmd git
+git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || tb_die "$repo is not a git repository"
+
+limit=$(( $(tb_now) - days * 86400 ))
+current=$(git -C "$repo" symbolic-ref --quiet --short HEAD || true)
+
+args=(for-each-ref --sort=committerdate --format='%(committerdate:unix)|%(committerdate:short)|%(authorname)|%(refname:short)' refs/heads)
+if [[ -n $base ]]; then
+    git -C "$repo" rev-parse --verify --quiet "$base" >/dev/null || tb_die "unknown base: $base"
+    args+=(--merged "$base")
+fi
+
+tb_readlines rows < <(git -C "$repo" "${args[@]}")
+
+authors=()
+for row in ${rows[@]+"${rows[@]}"}; do
+    IFS='|' read -r ts date author name <<< "$row"
+    [[ $name != "$current" ]] || continue
+    (( ts <= limit )) || continue
+    printf '%s  %s  %s\n' "$date" "$author" "$name"
+    authors+=("$author")
+done
+
+if (( summary && ${#authors[@]} > 0 )); then
+    echo
+    echo "stale branches per author:"
+    printf '%s\n' "${authors[@]}" | sort | uniq -c | sort -rn | sed 's/^ */  /'
+fi
