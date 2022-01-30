@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: db-backup-sqlserver.sh [-S SERVER] [-U USER] [-k KEEP] [-n] DEST_DIR DATABASE...
+usage: db-backup-sqlserver.sh [-S SERVER] [-U USER] [-k KEEP] [-V] [-n] DEST_DIR DATABASE...
 
 Run BACKUP DATABASE ... WITH COMPRESSION, CHECKSUM for each DATABASE through
 sqlcmd, writing DEST_DIR/DATABASE-YYYYmmdd-HHMMSS.bak.
@@ -22,6 +22,7 @@ options:
   -k KEEP     afterwards keep only the newest KEEP backups per database. This
               only works when DEST_DIR is also visible from this machine
               (default 0 = keep everything)
+  -V          after each backup run RESTORE VERIFYONLY ... WITH CHECKSUM
   -n          dry run: print the T-SQL, do not connect
   -h, --help  show this help
 
@@ -33,13 +34,15 @@ USAGE
 tb_handle_help usage "$@"
 
 server= user=
+verify=0
 keep=0
 dry=0
-while getopts ':S:U:k:nh' opt; do
+while getopts ':S:U:k:Vnh' opt; do
     case $opt in
         S) server=$OPTARG ;;
         U) user=$OPTARG ;;
         k) keep=$OPTARG ;;
+        V) verify=1 ;;
         n) dry=1 ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
@@ -95,15 +98,18 @@ status=0
 for db in "$@"; do
     file="$dest/$db-$(date +%Y%m%d-%H%M%S).bak"
     query="BACKUP DATABASE $(sql_ident "$db") TO DISK = $(sql_string "$file") WITH COMPRESSION, CHECKSUM, INIT, NAME = $(sql_string "$db full backup");"
+    check="RESTORE VERIFYONLY FROM DISK = $(sql_string "$file") WITH CHECKSUM;"
     if (( dry )); then
         echo "$query"
+        (( ! verify )) || echo "$check"
         continue
     fi
-    if sqlcmd "${conn[@]}" -Q "$query"; then
+    if sqlcmd "${conn[@]}" -Q "$query" &&
+        { (( ! verify )) || sqlcmd "${conn[@]}" -Q "$check"; }; then
         echo "wrote $file"
         prune "$db"
     else
-        tb_log "backup of $db failed"
+        tb_log "backup of $db failed (or did not verify)"
         status=1
     fi
 done
