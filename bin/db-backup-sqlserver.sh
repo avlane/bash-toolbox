@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: db-backup-sqlserver.sh [-S SERVER] [-U USER] [-k KEEP] [-V] [-n] DEST_DIR DATABASE...
+usage: db-backup-sqlserver.sh [-S SERVER] [-U USER] [-C] [-k KEEP] [-V] [-n] DEST_DIR DATABASE...
 
 Run BACKUP DATABASE ... WITH COMPRESSION, CHECKSUM for each DATABASE through
 sqlcmd, writing DEST_DIR/DATABASE-YYYYmmdd-HHMMSS.bak.
@@ -19,6 +19,9 @@ path on the machine running this script.
 options:
   -S SERVER   server or server,port (default: sqlcmd default, usually localhost)
   -U USER     SQL login. Without -U, integrated authentication (-E) is used.
+  -C          trust the server certificate. sqlcmd from mssql-tools18 (ODBC
+              Driver 18) encrypts by default and rejects a self-signed
+              certificate unless you pass this; only use it on networks you trust
   -k KEEP     afterwards keep only the newest KEEP backups per database. This
               only works when DEST_DIR is also visible from this machine
               (default 0 = keep everything)
@@ -34,13 +37,15 @@ USAGE
 tb_handle_help usage "$@"
 
 server= user=
+trust=0
 verify=0
 keep=0
 dry=0
-while getopts ':S:U:k:Vnh' opt; do
+while getopts ':S:U:Ck:Vnh' opt; do
     case $opt in
         S) server=$OPTARG ;;
         U) user=$OPTARG ;;
+        C) trust=1 ;;
         k) keep=$OPTARG ;;
         V) verify=1 ;;
         n) dry=1 ;;
@@ -64,6 +69,8 @@ if [[ -n $user ]]; then
 else
     conn+=(-E)
 fi
+
+(( ! trust )) || conn+=(-C)
 
 (( dry )) || tb_require_cmd sqlcmd
 
