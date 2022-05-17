@@ -60,4 +60,15 @@ test_flags_unhashed_known_hosts() {
     assert_status 0 "hashed host name is fine" "$ROOT/bin/ssh-audit.sh" -d "$d"
 }
 
+test_hosts_file_against_known_hosts() {
+    d="$WORK/hosts"
+    mkdir -p "$d" && chmod 700 "$d"
+    ssh-keygen -q -t ed25519 -N '' -f "$WORK/hostkey"
+    printf 'seen.example.org %s\n' "$(cut -d' ' -f1,2 "$WORK/hostkey.pub")" > "$d/known_hosts"
+    ssh-keygen -q -H -f "$d/known_hosts" >/dev/null 2>&1; rm -f "$d/known_hosts.old"
+    printf '# expected\nseen.example.org\nnew.example.org\n' > "$WORK/hostlist"
+    out=$("$ROOT/bin/ssh-audit.sh" -d "$d" -H "$WORK/hostlist" || true)
+    assert_eq "new.example.org: not found in $d/known_hosts" "$out" "only the unseen host is reported"
+}
+
 run_tests

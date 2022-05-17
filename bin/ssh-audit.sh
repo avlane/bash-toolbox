@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: ssh-audit.sh [-d SSH_DIR]
+usage: ssh-audit.sh [-d SSH_DIR] [-H HOSTS_FILE]
 
 Checks, in SSH_DIR (default ~/.ssh):
   - the directory is not accessible by group or others
@@ -16,11 +16,13 @@ Checks, in SSH_DIR (default ~/.ssh):
   - weak keys: DSA, or RSA smaller than 2048 bits
   - duplicate entries in authorized_keys
   - known_hosts entries that are not hashed
+  - with -H: hosts from HOSTS_FILE (one per line) that are not in known_hosts
 
 Prints one line per finding. Exit status is 1 if anything was found, else 0.
 
 options:
   -d DIR      directory to audit
+  -H FILE     list of host names that should already be in known_hosts
   -h, --help  show this help
 USAGE
 }
@@ -28,9 +30,11 @@ USAGE
 tb_handle_help usage "$@"
 
 dir=$HOME/.ssh
-while getopts ':d:h' opt; do
+hosts_file=
+while getopts ':d:H:h' opt; do
     case $opt in
         d) dir=$OPTARG ;;
+        H) hosts_file=$OPTARG ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
         *) tb_usage_error "unknown option -$OPTARG" ;;
@@ -109,6 +113,17 @@ if [[ -f $known ]]; then
     if (( plain > 0 )); then
         finding "$known" "$plain host entries are not hashed (ssh-keygen -H -f $known)"
     fi
+fi
+
+# hosts we expect to have connected to before; ssh-keygen -F understands hashed entries
+if [[ -n $hosts_file ]]; then
+    [[ -r $hosts_file ]] || tb_die "cannot read $hosts_file"
+    while IFS= read -r host; do
+        [[ -n $host && $host != \#* ]] || continue
+        if [[ ! -f $known ]] || ! ssh-keygen -F "$host" -f "$known" >/dev/null 2>&1; then
+            finding "$host" "not found in $known"
+        fi
+    done < "$hosts_file"
 fi
 
 (( findings == 0 )) || exit 1
