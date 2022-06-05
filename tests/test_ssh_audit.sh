@@ -71,4 +71,23 @@ test_hosts_file_against_known_hosts() {
     assert_eq "new.example.org: not found in $d/known_hosts" "$out" "only the unseen host is reported"
 }
 
+test_verbose_lists_fingerprints() {
+    d="$WORK/verbose"
+    mkdir -p "$d" && chmod 700 "$d"
+    ssh-keygen -q -t ed25519 -N 'pass phrase' -f "$d/id_ed25519"
+    out=$("$ROOT/bin/ssh-audit.sh" -v -d "$d")
+    case $out in
+        "$d/id_ed25519: ED25519 256 SHA256:"*) assert_eq 1 1 "inventory line" ;;
+        *) assert_eq "ED25519 256 SHA256:..." "$out" "inventory line" ;;
+    esac
+}
+
+test_strict_flags_rsa_2048() {
+    d="$WORK/strict"
+    mkdir -p "$d" && chmod 700 "$d"
+    ssh-keygen -q -t rsa -b 2048 -N 'pass phrase' -f "$d/id_rsa"
+    assert_status 0 "2048-bit RSA passes by default" "$ROOT/bin/ssh-audit.sh" -d "$d"
+    assert_status 1 "2048-bit RSA fails with -s" "$ROOT/bin/ssh-audit.sh" -s -d "$d"
+}
+
 run_tests

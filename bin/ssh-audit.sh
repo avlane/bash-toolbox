@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: ssh-audit.sh [-d SSH_DIR] [-H HOSTS_FILE]
+usage: ssh-audit.sh [-d SSH_DIR] [-H HOSTS_FILE] [-s] [-v]
 
 Checks, in SSH_DIR (default ~/.ssh):
   - the directory is not accessible by group or others
@@ -22,6 +22,8 @@ Prints one line per finding. Exit status is 1 if anything was found, else 0.
 
 options:
   -d DIR      directory to audit
+  -s          strict: also flag RSA keys smaller than 3072 bits
+  -v          list every private key with its type, size and fingerprint
   -H FILE     list of host names that should already be in known_hosts
   -h, --help  show this help
 USAGE
@@ -31,10 +33,14 @@ tb_handle_help usage "$@"
 
 dir=$HOME/.ssh
 hosts_file=
-while getopts ':d:H:h' opt; do
+strict=0
+verbose=0
+while getopts ':d:H:svh' opt; do
     case $opt in
         d) dir=$OPTARG ;;
         H) hosts_file=$OPTARG ;;
+        s) strict=1 ;;
+        v) verbose=1 ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
         *) tb_usage_error "unknown option -$OPTARG" ;;
@@ -85,10 +91,16 @@ for key in "$dir"/*; do
         bits=${info%% *}
         type=${info##*(}
         type=${type%)}
+        if (( verbose )); then
+            fingerprint=${info#* }
+            echo "$key: $type $bits ${fingerprint%% *}"
+        fi
         case $type in
             DSA) finding "$key" "DSA keys are weak, replace with ed25519" ;;
             RSA) if (( bits < 2048 )); then
                      finding "$key" "RSA key is only $bits bits"
+                 elif (( strict && bits < 3072 )); then
+                     finding "$key" "RSA key is $bits bits, 3072 or ed25519 is recommended"
                  fi ;;
         esac
     fi
