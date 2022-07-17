@@ -41,6 +41,25 @@ test_manifest_selects_and_renames() {
     assert_eq "no" "$([ -e "$WORK/man/home/.profile" ] && echo yes || echo no)" "unlisted default target not made"
 }
 
+test_second_run_changes_nothing() {
+    fresh again
+    "$BS" -t "$WORK/again/home" "$WORK/again/repo" >/dev/null
+    out=$("$BS" -t "$WORK/again/home" "$WORK/again/repo")
+    assert_eq "0" "$(ls -A "$WORK/again/home" | grep -c '\.bak$')" "no .bak files after a second run"
+    case $out in
+        *"already linked"*"already linked"*) assert_eq 1 1 "reports already linked" ;;
+        *) assert_eq "already linked x2" "$out" "reports already linked" ;;
+    esac
+}
+
+test_wrong_symlink_is_replaced_without_backup() {
+    fresh stale
+    ln -s /nonexistent "$WORK/stale/home/.vimrc"
+    "$BS" -t "$WORK/stale/home" "$WORK/stale/repo" >/dev/null
+    assert_eq "$WORK/stale/repo/vimrc" "$(readlink "$WORK/stale/home/.vimrc")" "link now points at the repo"
+    assert_eq "0" "$(ls -A "$WORK/stale/home" | grep -c '\.bak$')" "a dangling link is not worth a .bak"
+}
+
 test_usage_error() {
     assert_status 2 "no directory" "$BS"
 }

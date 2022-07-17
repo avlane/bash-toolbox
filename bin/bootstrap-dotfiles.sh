@@ -55,12 +55,18 @@ link_one() {
         tb_warn "$name is not in $src, skipping"
         return 0
     fi
+    if [[ -L $to && $(readlink "$to") == "$from" ]]; then
+        echo "already linked $to"
+        return 0
+    fi
     if (( dry )); then
         echo "would link $to -> $from"
         return 0
     fi
     mkdir -p "$(dirname "$to")"
-    if [[ -e $to || -L $to ]]; then
+    if [[ -L $to && ! -e $to ]]; then
+        rm "$to"    # a dangling link has nothing worth keeping
+    elif [[ -e $to || -L $to ]]; then
         mv "$to" "$to.bak"
         echo "backed up $to"
     fi
