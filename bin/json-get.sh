@@ -13,9 +13,10 @@ Print the value at KEY (a jq path such as .name or .server.port) from FILE, or
 from standard input when FILE is omitted or "-".
 
 Uses jq when it is installed. Without jq (or with TB_NO_JQ=1) a small bash
-fallback is used. The fallback only understands plain object keys, optionally
-nested with dots, and prints strings, numbers, true, false and null; it does not
-print objects or arrays and it does not handle escaped quotes in strings.
+fallback is used. The fallback understands plain object keys nested with dots,
+and an index into an array of plain values (.tags[1]). It prints strings,
+numbers, true, false and null; it does not print objects or arrays, cannot look
+inside arrays of objects, and does not handle escaped quotes in strings.
 Install jq if you need more.
 
 options:
@@ -43,16 +44,42 @@ key=$1
 file=${2:--}
 [[ $key == .* ]] || key=.$key
 
+# json_nth ARRAY_TEXT INDEX - print element INDEX of an array of scalars
+# ("[1, \"two\", 3]"); the text up to and including the element is all we need
+json_nth() {
+    local rest=${1#[} want=$2 i=0 re
+    re='^[[:space:]]*("[^"]*"|[^,"[:space:]]+)[[:space:]]*([,]|\])'
+    while [[ $rest =~ $re ]]; do
+        if (( i == want )); then
+            printf '%s' "${BASH_REMATCH[1]}"
+            return 0
+        fi
+        rest=${rest#"${BASH_REMATCH[0]}"}
+        i=$((i + 1))
+    done
+    return 1
+}
+
 # json_fallback JSON PATH - the no-jq implementation, see usage
 json_fallback() {
-    local json=$1 rest=$2 part re value
+    local json=$1 rest=$2 part idx re value
     while [[ -n $rest ]]; do
         part=${rest%%.*}
         if [[ $rest == *.* ]]; then rest=${rest#*.}; else rest=''; fi
+        idx=
+        if [[ $part =~ ^([A-Za-z0-9_-]+)\[([0-9]+)\]$ ]]; then
+            part=${BASH_REMATCH[1]}
+            idx=${BASH_REMATCH[2]}
+        fi
         [[ $part =~ ^[A-Za-z0-9_-]+$ ]] || tb_die "fallback only supports simple keys, install jq"
         re="\"$part\"[[:space:]]*:[[:space:]]*"
         [[ $json =~ $re ]] || return 1
         json=${json#*"${BASH_REMATCH[0]}"}
+        if [[ -n $idx ]]; then
+            [[ $json == \[* ]] || return 1
+            json=$(json_nth "$json" "$idx") || return 1
+            [[ -z $rest ]] || tb_die "fallback cannot look inside array elements, install jq"
+        fi
     done
     re='^"([^"]*)"'
     if [[ $json =~ $re ]]; then

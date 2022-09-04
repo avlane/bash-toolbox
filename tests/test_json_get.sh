@@ -6,7 +6,7 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/json-test.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 
 cat > "$WORK/doc.json" <<'JSON'
-{"name": "box", "port": 8080, "debug": false, "server": {"host": "db01", "port": 5432}}
+{"name": "box", "port": 8080, "debug": false, "server": {"host": "db01", "port": 5432}, "tags": ["a b", "c", 42]}
 JSON
 
 test_reads_string_raw() {
@@ -32,6 +32,12 @@ test_false_is_exit_1() {
 
 test_quoted_string_without_raw() {
     assert_eq '"box"' "$("$ROOT/bin/json-get.sh" name "$WORK/doc.json")" "string keeps quotes"
+}
+
+test_array_index() {
+    assert_eq "a b" "$("$ROOT/bin/json-get.sh" -r '.tags[0]' "$WORK/doc.json")" "first element, string with space"
+    assert_eq "42" "$("$ROOT/bin/json-get.sh" 'tags[2]' "$WORK/doc.json")" "number element"
+    assert_status 1 "index past the end" "$ROOT/bin/json-get.sh" 'tags[3]' "$WORK/doc.json"
 }
 
 test_usage() {
