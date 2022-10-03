@@ -44,4 +44,36 @@ test_delay_doubles_up_to_max() {
     assert_eq "2 4 5 5" "$(tr '\n' ' ' < "$WORK/sleeps" | sed 's/ $//')" "delays 2,4,5,5"
 }
 
+test_only_retries_listed_codes() {
+    rm -f "$WORK/count"
+    cat > "$WORK/exit75" <<'SCRIPT'
+#!/bin/bash
+echo x >> "$1"
+exit 75
+SCRIPT
+    chmod +x "$WORK/exit75"
+    assert_status 75 "listed code is retried then returned" "$ROOT/bin/retry.sh" -t 3 -r 1,75 "$WORK/exit75" "$WORK/count"
+    assert_eq "3" "$(wc -l < "$WORK/count" | tr -d ' ')" "retried three times"
+    rm -f "$WORK/count"
+    assert_status 75 "unlisted code stops at once" "$ROOT/bin/retry.sh" -t 3 -r 1 "$WORK/exit75" "$WORK/count"
+    assert_eq "1" "$(wc -l < "$WORK/count" | tr -d ' ')" "ran once"
+}
+
+test_rejects_bad_code_list() {
+    assert_status 2 "bad -r" "$ROOT/bin/retry.sh" -r one,two true
+}
+
+test_jitter_stays_within_bounds() {
+    printf '#!/bin/bash\necho "$1" >> "%s/jsleeps"\n' "$WORK" > "$WORK/fake-sleep"
+    chmod +x "$WORK/fake-sleep"
+    rm -f "$WORK/jsleeps"
+    TB_SLEEP="$WORK/fake-sleep" "$ROOT/bin/retry.sh" -t 2 -d 10 -j false 2>/dev/null || true
+    d=$(cat "$WORK/jsleeps")
+    if [ "$d" -ge 10 ] && [ "$d" -le 15 ]; then
+        assert_eq 1 1 "10 <= delay <= 15"
+    else
+        assert_eq "10..15" "$d" "10 <= delay <= 15"
+    fi
+}
+
 run_tests
