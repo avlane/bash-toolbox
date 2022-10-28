@@ -77,3 +77,23 @@ tb_readlines() {
         done
     fi
 }
+
+# tb_quote TEXT - shell-quote TEXT so it can be pasted back into a shell.
+# bash 4.4 added ${var@Q}; before that printf %q does the job (its output looks
+# different, for example a\ b instead of 'a b', but means the same).
+tb_quote() {
+    if tb_bash_at_least 4 4; then
+        printf '%s' "${1@Q}"
+    else
+        printf '%q' "$1"
+    fi
+}
+
+# tb_quote_args ARG... - the arguments quoted and joined with spaces
+tb_quote_args() {
+    local arg out=
+    for arg in "$@"; do
+        out="$out $(tb_quote "$arg")"
+    done
+    printf '%s' "${out# }"
+}

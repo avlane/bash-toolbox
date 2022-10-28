@@ -47,4 +47,16 @@ test_readlines_rejects_bad_name() {
     assert_status 1 "bad array name" bash -c '. "$1"; tb_readlines "a b" </dev/null' _ "$ROOT/lib/common.sh"
 }
 
+test_quote_args_round_trip() {
+    # whatever form the quoting takes, eval must give back the same words
+    quoted=$(tb_quote_args 'a b' "it's" '' '$HOME' 'x"y')
+    eval "set -- $quoted"
+    assert_eq "5" "$#" "five words survive"
+    assert_eq "a b" "$1" "space"
+    assert_eq "it's" "$2" "single quote"
+    assert_eq "" "$3" "empty word"
+    assert_eq '$HOME' "$4" "no expansion"
+    assert_eq 'x"y' "$5" "double quote"
+}
+
 run_tests

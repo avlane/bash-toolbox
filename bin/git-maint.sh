@@ -41,7 +41,7 @@ tb_require_cmd git
 git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || tb_die "$repo is not a git repository"
 
 run() {
-    echo "+ $*"
+    echo "+ $(tb_quote_args "$@")"
     if (( ! dry )); then
         "$@"
     fi

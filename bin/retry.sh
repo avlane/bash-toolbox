@@ -75,7 +75,7 @@ while true; do
         tb_log "giving up after $attempt attempt(s), last exit status $status"
         exit "$status"
     fi
-    tb_log "attempt $attempt failed (status $status), retrying in ${delay}s"
+    tb_log "attempt $attempt of $tries failed (status $status), retrying in ${delay}s: $(tb_quote_args "$@")"
     wait_for=$delay
     if (( jitter )); then
         wait_for=$(( delay + RANDOM % (delay / 2 + 1) ))
