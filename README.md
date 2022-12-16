@@ -11,21 +11,27 @@ on a usage error. Shared helpers are in `lib/common.sh`.
 | script | what it does |
 | --- | --- |
 | `backup.sh [-n] [-k N] [-x PAT] SRC DEST` | tar+gzip `SRC` into `DEST/NAME-DATE.tar.gz`, atomically; optionally keep only the newest N |
-| `rotate-backups.sh DIR DAYS` | delete `*.tar.gz` in `DIR` older than `DAYS` days |
+| `rotate-backups.sh [-n] [-p GLOB] DIR DAYS` | delete matching files (default `*.tar.gz`) older than `DAYS` days, always keeping the last one |
 | `rotate-logs.sh [-k N] FILE...` | numbered copy-and-truncate rotation |
 | `disk-alert.sh [-i PCT] [-c FILE] [PCT]` | filesystems at or over `PCT` percent (default 90), optionally inode usage and per-mount overrides; exit 1 if any |
 | `saferm.sh [-n] [-v] FILE...` / `-P DAYS` | move files to `~/.saferm-trash` (or `$SAFERM_TRASH`) as `NAME.EPOCH`; `-P` purges old entries |
 | `tail-logs.sh [-n N] [-g RE] [-c] [-F] FILE...` | follow several logs, each line prefixed with the file name |
-| `healthcheck.sh HOST PORT` / `-u URL` | TCP or HTTP check; exit 0 healthy, 1 unhealthy |
-| `retry.sh [-t N] [-d S] CMD...` | run a command again with exponential backoff |
+| `healthcheck.sh HOST PORT` / `-u URL` / `-f FILE` | TCP or HTTP checks, optional JSON output; exit 0 healthy, 1 unhealthy |
+| `retry.sh [-t N] [-d S] [-j] [-r CODES] CMD...` | run a command again with exponential backoff, optional jitter and exit-code filter |
 | `json-get.sh [-r] KEY [FILE]` | read a value from JSON; uses jq, with a limited pure-bash fallback |
 | `gen-systemd.sh -n NAME -c CMD [-t CALENDAR]` | print a systemd service unit, and a timer with `-t` |
 | `db-backup-postgres.sh [-V] [-k N] DEST DB...` | `pg_dump` custom-format dumps with retention and optional verify |
 | `db-backup-mysql.sh [-k N] DEST DB...` | `mysqldump` + gzip with retention; password via option file, never argv |
 | `git-maint.sh [-n] [-a] [REPO]` | prune, reflog expire and gc |
 | `git-stale-branches.sh [-d DAYS] [-m BASE] [-s] [REPO]` | stale local branches, oldest first; optionally only merged ones, with a per-author count |
-| `ssh-audit.sh [-d DIR]` | key permissions, missing passphrases, weak keys, duplicate authorized_keys, unhashed known_hosts |
-| `bootstrap-dotfiles.sh DIR` | link every file in `DIR` as `~/.name`, keeping `.bak` copies |
+| `ssh-audit.sh [-d DIR] [-H HOSTS] [-s] [-v]` | key permissions, missing passphrases, weak keys, duplicate authorized_keys, unhashed known_hosts |
+| `bootstrap-dotfiles.sh [-n] [-t DIR] [-m MANIFEST] DIR` | link entries of `DIR` as `~/.name`, idempotent, keeping `.bak` copies |
+| `db-backup-sqlserver.sh [-S SRV] [-V] [-C] DEST DB...` | `BACKUP DATABASE` through `sqlcmd` |
+
+## Exit codes
+
+All scripts use the same convention: 0 success, 1 the thing being checked or
+done failed (or a check found problems), 2 bad command line.
 
 ## Tests
 
@@ -34,7 +40,11 @@ make test        # or: bash tests/run.sh
 ```
 
 `tests/harness.sh` is a small assert-style harness; each `tests/test_*.sh`
-sources it. Tests use temporary directories and do not touch your home.
+sources it. Output is TAP-like (`ok - name` / `not ok - name`, with `# FAIL`
+detail lines and `# SKIP` for skipped tests). Tests use temporary directories
+and do not touch your home. External programs (`pg_dump`, `mysqldump`,
+`sqlcmd`, `curl`, `nc`) are replaced by small stubs placed first on `PATH`, so
+no database or network is needed.
 
 ## Examples
 
