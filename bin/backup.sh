@@ -9,8 +9,10 @@ usage() {
     cat <<'USAGE'
 usage: backup.sh [-n] [-k COUNT] [-x PATTERN]... SOURCE_DIR DEST_DIR
 
-Create DEST_DIR/NAME-YYYYmmdd-HHMMSS.tar.gz from SOURCE_DIR. The archive is
-written to a temporary file first and renamed, so a failed run never leaves a
+Create DEST_DIR/NAME-YYYYmmdd-HHMMSS.tar.gz from SOURCE_DIR, plus a
+NAME-...tar.gz.sha256 file with its SHA-256 checksum (verify with
+restore-backup.sh, or sha256sum -c / shasum -a 256 -c). The archive is written
+to a temporary file first and renamed, so a failed run never leaves a
 half-written archive behind.
 
 options:
@@ -59,6 +61,7 @@ trap 'rm -f "$tmp"' EXIT
 
 tar -czf "$tmp" ${excludes[@]+"${excludes[@]}"} -C "$(dirname "$src")" "$name"
 mv "$tmp" "$archive"
+tb_sha256 "$archive" > "$archive.sha256"
 echo "wrote $archive"
 
 if (( keep > 0 )); then
@@ -67,7 +70,7 @@ if (( keep > 0 )); then
     while IFS= read -r old; do
         n=$((n + 1))
         if (( n > keep )); then
-            rm -f -- "$old"
+            rm -f -- "$old" "$old.sha256"
             echo "removed $old"
         fi
     done < <(ls -1t "$dest/$name"-*.tar.gz)

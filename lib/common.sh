@@ -97,3 +97,32 @@ tb_quote_args() {
     done
     printf '%s' "${out# }"
 }
+
+# tb_sha256 FILE - print "HASH  NAME" (the sha256sum format) for FILE.
+# Linux has sha256sum, macOS has shasum; either way the output is identical.
+tb_sha256() {
+    local dir name
+    dir=$(dirname "$1")
+    name=$(basename "$1")
+    if command -v sha256sum >/dev/null 2>&1; then
+        (cd "$dir" && sha256sum "$name")
+    elif command -v shasum >/dev/null 2>&1; then
+        (cd "$dir" && shasum -a 256 "$name")
+    else
+        tb_die "need sha256sum or shasum to compute checksums"
+    fi
+}
+
+# tb_sha256_verify SUMFILE - check the files named in SUMFILE, relative to its directory
+tb_sha256_verify() {
+    local dir name
+    dir=$(dirname "$1")
+    name=$(basename "$1")
+    if command -v sha256sum >/dev/null 2>&1; then
+        (cd "$dir" && sha256sum -c "$name" >/dev/null 2>&1)
+    elif command -v shasum >/dev/null 2>&1; then
+        (cd "$dir" && shasum -a 256 -c "$name" >/dev/null 2>&1)
+    else
+        tb_die "need sha256sum or shasum to verify checksums"
+    fi
+}
