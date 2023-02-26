@@ -13,7 +13,7 @@ Verify ARCHIVE against ARCHIVE.sha256 (when that file exists) and extract it
 into DEST_DIR. Refuses to extract if
 
   - the checksum does not match,
-  - an entry has an absolute path,
+  - an entry has an absolute path or a .. component,
   - DEST_DIR already contains files (override with -f).
 
 options:
@@ -53,6 +53,10 @@ tb_readlines entries < <(tar -tzf "$archive")
 for entry in ${entries[@]+"${entries[@]}"}; do
     case $entry in
         /*) tb_die "refusing to extract: absolute path in archive: $entry" ;;
+    esac
+    # a ".." component can climb out of DEST_DIR; "file..txt" is fine
+    case /$entry/ in
+        */../*) tb_die "refusing to extract: entry leaves the target directory: $entry" ;;
     esac
 done
 

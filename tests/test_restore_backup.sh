@@ -44,4 +44,19 @@ test_absolute_paths_are_refused() {
     assert_eq "no" "$([ -e "$WORK/out5" ] && echo yes || echo no)" "nothing extracted"
 }
 
+test_parent_directory_entries_are_refused() {
+    mkdir -p "$WORK/trav/inner"
+    echo evil > "$WORK/trav/outside.txt"
+    (cd "$WORK/trav/inner" && tar -czPf "$WORK/trav.tar.gz" ../outside.txt)
+    assert_status 1 "entry that climbs out of the target" "$RS" "$WORK/trav.tar.gz" "$WORK/out6"
+    assert_eq "no" "$([ -e "$WORK/out6" ] && echo yes || echo no)" "nothing extracted"
+}
+
+test_dotdot_inside_a_name_is_fine() {
+    mkdir -p "$WORK/dd/proj"
+    echo ok > "$WORK/dd/proj/file..txt"
+    (cd "$WORK/dd" && tar -czf "$WORK/dd.tar.gz" proj)
+    assert_status 0 "file..txt is not a traversal" "$RS" "$WORK/dd.tar.gz" "$WORK/out7"
+}
+
 run_tests
