@@ -55,7 +55,9 @@ tb_bash_at_least() {
 # tb_now - seconds since the epoch. bash 5 provides EPOCHSECONDS, which saves a
 # fork of date; older shells (including macOS /bin/bash 3.2) fall back to date.
 tb_now() {
-    if [[ -n ${EPOCHSECONDS:-} ]]; then
+    if [[ -n ${TB_NOW:-} ]]; then     # tests pin the clock with TB_NOW
+        printf '%s\n' "$TB_NOW"
+    elif [[ -n ${EPOCHSECONDS:-} ]]; then
         printf '%s\n' "$EPOCHSECONDS"
     else
         date +%s
@@ -125,4 +127,36 @@ tb_sha256_verify() {
     else
         tb_die "need sha256sum or shasum to verify checksums"
     fi
+}
+
+# tb_days_from_civil YEAR MONTH DAY - days since 1970-01-01 (proleptic Gregorian).
+# Plain integer arithmetic, so it behaves the same with BSD and GNU userlands,
+# unlike date -d / date -j.
+tb_days_from_civil() {
+    local y=$1 m=$((10#$2)) d=$((10#$3)) era yoe doy doe
+    if (( m <= 2 )); then
+        y=$((y - 1))
+    fi
+    era=$(( (y >= 0 ? y : y - 399) / 400 ))
+    yoe=$(( y - era * 400 ))
+    doy=$(( (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1 ))
+    doe=$(( yoe * 365 + yoe / 4 - yoe / 100 + doy ))
+    printf '%s\n' $(( era * 146097 + doe - 719468 ))
+}
+
+# tb_civil_from_days DAYS - the inverse: prints "YEAR MONTH DAY" for days since 1970-01-01
+tb_civil_from_days() {
+    local z=$(( $1 + 719468 )) era doe yoe y doy mp d m
+    era=$(( (z >= 0 ? z : z - 146096) / 146097 ))
+    doe=$(( z - era * 146097 ))
+    yoe=$(( (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365 ))
+    y=$(( yoe + era * 400 ))
+    doy=$(( doe - (365 * yoe + yoe / 4 - yoe / 100) ))
+    mp=$(( (5 * doy + 2) / 153 ))
+    d=$(( doy - (153 * mp + 2) / 5 + 1 ))
+    m=$(( mp < 10 ? mp + 3 : mp - 9 ))
+    if (( m <= 2 )); then
+        y=$((y + 1))
+    fi
+    printf '%s %s %s\n' "$y" "$m" "$d"
 }

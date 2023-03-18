@@ -59,4 +59,16 @@ test_quote_args_round_trip() {
     assert_eq 'x"y' "$5" "double quote"
 }
 
+test_civil_date_round_trip() {
+    assert_eq "0" "$(tb_days_from_civil 1970 01 01)" "epoch day"
+    assert_eq "19782" "$(tb_days_from_civil 2024 02 29)" "leap day 2024"
+    assert_eq "2024 2 29" "$(tb_civil_from_days 19782)" "and back"
+    assert_eq "2000 3 1" "$(tb_civil_from_days "$(tb_days_from_civil 2000 03 01)")" "round trip after a leap February"
+    assert_eq "1969 12 31" "$(tb_civil_from_days -1)" "day before the epoch"
+}
+
+test_now_can_be_pinned() {
+    assert_eq "1700000000" "$(TB_NOW=1700000000 tb_now)" "TB_NOW overrides the clock"
+}
+
 run_tests
