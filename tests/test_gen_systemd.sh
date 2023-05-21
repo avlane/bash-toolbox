@@ -37,6 +37,19 @@ test_timer_makes_oneshot_service() {
     assert_eq "0" "$(grep -c '^\[Install\]' "$WORK/units/nightly.service")" "service has no Install section"
 }
 
+test_hardening_options() {
+    out=$("$ROOT/bin/gen-systemd.sh" -n job -c /usr/local/bin/job -H -W /var/lib/job -W /var/log/job)
+    assert_eq "ProtectSystem=strict" "$(echo "$out" | grep '^ProtectSystem=')" "sandboxing present"
+    assert_eq "ReadWritePaths=/var/lib/job
+ReadWritePaths=/var/log/job" "$(echo "$out" | grep '^ReadWritePaths=')" "writable paths listed"
+    plain=$("$ROOT/bin/gen-systemd.sh" -n job -c /usr/local/bin/job)
+    assert_eq "0" "$(echo "$plain" | grep -c 'ProtectSystem')" "off by default"
+}
+
+test_writable_paths_need_hardening() {
+    assert_status 2 "-W without -H" "$ROOT/bin/gen-systemd.sh" -n job -c /bin/true -W /tmp
+}
+
 test_rejects_relative_command() {
     assert_status 2 "relative ExecStart" "$ROOT/bin/gen-systemd.sh" -n x -c ./run.sh
 }

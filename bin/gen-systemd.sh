@@ -8,7 +8,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 usage: gen-systemd.sh -n NAME -c COMMAND [-t ONCALENDAR] [-o DIR] [-d DESCRIPTION]
-                      [-u USER] [-w WORKDIR] [-e VAR=VALUE]...
+                      [-u USER] [-w WORKDIR] [-e VAR=VALUE]... [-H] [-W PATH]...
 
 Print a NAME.service unit to standard output. COMMAND must start with an
 absolute path, as systemd requires for ExecStart.
@@ -24,6 +24,10 @@ options:
   -u USER         User=
   -w WORKDIR      WorkingDirectory=
   -e VAR=VALUE    Environment= entry, repeatable
+  -H              add sandboxing: NoNewPrivileges, PrivateTmp, ProtectSystem=strict,
+                  ProtectHome=read-only, ProtectKernelTunables, RestrictSUIDSGID
+  -W PATH         with -H, a path the service may still write to
+                  (ReadWritePaths=), repeatable
   -t ONCALENDAR   also generate a timer that runs the service on this schedule
   -o DIR          write NAME.service (and NAME.timer) into DIR instead of stdout
   -h, --help      show this help
@@ -33,8 +37,10 @@ USAGE
 tb_handle_help usage "$@"
 
 name= cmd= desc= user= workdir= calendar= outdir=
+harden=0
 envs=()
-while getopts ':n:c:d:u:w:e:t:o:h' opt; do
+writable=()
+while getopts ':n:c:d:u:w:e:t:o:HW:h' opt; do
     case $opt in
         n) name=$OPTARG ;;
         c) cmd=$OPTARG ;;
@@ -44,6 +50,8 @@ while getopts ':n:c:d:u:w:e:t:o:h' opt; do
         e) envs+=("$OPTARG") ;;
         t) calendar=$OPTARG ;;
         o) outdir=$OPTARG ;;
+        H) harden=1 ;;
+        W) writable+=("$OPTARG") ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
         *) tb_usage_error "unknown option -$OPTARG" ;;
@@ -54,6 +62,9 @@ shift $((OPTIND - 1))
 [[ -n $name && -n $cmd ]] || tb_usage_error "-n and -c are required"
 [[ $name =~ ^[A-Za-z0-9_.@-]+$ ]] || tb_usage_error "unit name has characters systemd does not allow"
 [[ $cmd == /* ]] || tb_usage_error "COMMAND must start with an absolute path"
+if (( ! harden )) && [[ ${#writable[@]} -gt 0 ]]; then
+    tb_usage_error "-W only makes sense together with -H"
+fi
 
 emit_service() {
     echo "[Unit]"
@@ -72,6 +83,17 @@ emit_service() {
     for e in ${envs[@]+"${envs[@]}"}; do
         echo "Environment=\"$e\""
     done
+    if (( harden )); then
+        echo "NoNewPrivileges=true"
+        echo "PrivateTmp=true"
+        echo "ProtectSystem=strict"
+        echo "ProtectHome=read-only"
+        echo "ProtectKernelTunables=true"
+        echo "RestrictSUIDSGID=true"
+        for p in ${writable[@]+"${writable[@]}"}; do
+            echo "ReadWritePaths=$p"
+        done
+    fi
     if [[ -z $calendar ]]; then
         echo "Restart=on-failure"
         echo
