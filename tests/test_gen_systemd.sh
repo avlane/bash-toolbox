@@ -50,6 +50,25 @@ test_writable_paths_need_hardening() {
     assert_status 2 "-W without -H" "$ROOT/bin/gen-systemd.sh" -n job -c /bin/true -W /tmp
 }
 
+test_install_writes_user_units() {
+    out=$(XDG_CONFIG_HOME="$WORK/xdg" "$ROOT/bin/gen-systemd.sh" -i -n tick -c /usr/bin/true -t hourly)
+    assert_file_exists "$WORK/xdg/systemd/user/tick.service" "service installed"
+    assert_file_exists "$WORK/xdg/systemd/user/tick.timer" "timer installed"
+    case $out in
+        *"enable --now tick.timer") assert_eq 1 1 "hint names the timer" ;;
+        *) assert_eq "... enable --now tick.timer" "$out" "hint names the timer" ;;
+    esac
+}
+
+test_verify_uses_systemd_analyze() {
+    mkdir -p "$WORK/bin"
+    printf '#!/bin/bash\necho "$@" >> "%s/analyze.log"\n[ -z "${ANALYZE_FAIL:-}" ]\n' "$WORK" > "$WORK/bin/systemd-analyze"
+    chmod +x "$WORK/bin/systemd-analyze"
+    PATH="$WORK/bin:$PATH" "$ROOT/bin/gen-systemd.sh" -V -n chk -c /usr/bin/true -t daily >/dev/null
+    assert_eq "2" "$(wc -l < "$WORK/analyze.log" | tr -d ' ')" "service and timer were both verified"
+    ANALYZE_FAIL=1 PATH="$WORK/bin:$PATH" assert_status 1 "a rejected unit fails the run" "$ROOT/bin/gen-systemd.sh" -V -n chk -c /usr/bin/true
+}
+
 test_rejects_relative_command() {
     assert_status 2 "relative ExecStart" "$ROOT/bin/gen-systemd.sh" -n x -c ./run.sh
 }

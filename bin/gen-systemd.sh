@@ -8,7 +8,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 usage: gen-systemd.sh -n NAME -c COMMAND [-t ONCALENDAR] [-o DIR] [-d DESCRIPTION]
-                      [-u USER] [-w WORKDIR] [-e VAR=VALUE]... [-H] [-W PATH]...
+                      [-u USER] [-w WORKDIR] [-e VAR=VALUE]... [-H] [-W PATH]... [-i] [-V]
 
 Print a NAME.service unit to standard output. COMMAND must start with an
 absolute path, as systemd requires for ExecStart.
@@ -29,6 +29,10 @@ options:
   -W PATH         with -H, a path the service may still write to
                   (ReadWritePaths=), repeatable
   -t ONCALENDAR   also generate a timer that runs the service on this schedule
+  -i              install as user units into ${XDG_CONFIG_HOME:-~/.config}/systemd/user
+                  (same as -o with that directory) and print the systemctl commands
+  -V              verify the generated files with systemd-analyze verify
+                  (skipped with a warning when systemd-analyze is not installed)
   -o DIR          write NAME.service (and NAME.timer) into DIR instead of stdout
   -h, --help      show this help
 USAGE
@@ -37,10 +41,12 @@ USAGE
 tb_handle_help usage "$@"
 
 name= cmd= desc= user= workdir= calendar= outdir=
+install=0
+validate=0
 harden=0
 envs=()
 writable=()
-while getopts ':n:c:d:u:w:e:t:o:HW:h' opt; do
+while getopts ':n:c:d:u:w:e:t:o:HW:iVh' opt; do
     case $opt in
         n) name=$OPTARG ;;
         c) cmd=$OPTARG ;;
@@ -51,6 +57,8 @@ while getopts ':n:c:d:u:w:e:t:o:HW:h' opt; do
         t) calendar=$OPTARG ;;
         o) outdir=$OPTARG ;;
         H) harden=1 ;;
+        i) install=1 ;;
+        V) validate=1 ;;
         W) writable+=("$OPTARG") ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
@@ -114,13 +122,45 @@ emit_timer() {
     echo "WantedBy=timers.target"
 }
 
-if [[ -n $outdir ]]; then
+if (( install )); then
+    [[ -z $outdir ]] || tb_usage_error "-i and -o cannot be combined"
+    outdir=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
+fi
+
+# verifying needs files, so without -o/-i write them to a temporary directory
+tmpdir=
+if (( validate )) && [[ -z $outdir ]]; then
+    tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/gen-systemd.XXXXXX")
+    trap 'rm -rf "$tmpdir"' EXIT
+fi
+
+verify_units() {
+    local dir=$1 unit
+    if ! command -v systemd-analyze >/dev/null 2>&1; then
+        tb_warn "systemd-analyze not found, units were not verified"
+        return 0
+    fi
+    for unit in "$dir/$name.service" "$dir/$name.timer"; do
+        [[ -f $unit ]] || continue
+        systemd-analyze verify "$unit" || tb_die "systemd-analyze rejected $unit"
+    done
+}
+
+if [[ -n $outdir || -n $tmpdir ]]; then
+    target=${outdir:-$tmpdir}
+    outdir=$target
     mkdir -p "$outdir"
     emit_service > "$outdir/$name.service"
     echo "wrote $outdir/$name.service"
     if [[ -n $calendar ]]; then
         emit_timer > "$outdir/$name.timer"
         echo "wrote $outdir/$name.timer"
+    fi
+    (( ! validate )) || verify_units "$outdir"
+    if (( install )); then
+        main_unit=$name.service
+        [[ -z $calendar ]] || main_unit=$name.timer
+        echo "next: systemctl --user daemon-reload && systemctl --user enable --now $main_unit"
     fi
 else
     emit_service
