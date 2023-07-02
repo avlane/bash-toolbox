@@ -98,12 +98,6 @@ check_http() {
     rm -f "$body"
 }
 
-# json_escape TEXT - escape backslashes and double quotes for a JSON string
-json_escape() {
-    local s=${1//\\/\\\\}
-    printf '%s' "${s//\"/\\\"}"
-}
-
 failures=0
 
 # report LABEL STATUS - print the result of one check and count failures
@@ -115,7 +109,7 @@ report() {
         failures=$((failures + 1))
     fi
     if (( json )); then
-        printf '{"target":"%s","ok":%s,"detail":"%s"}\n' "$(json_escape "$label")" "$ok" "$(json_escape "$detail")"
+        printf '{"target":"%s","ok":%s,"detail":"%s"}\n' "$(tb_json_escape "$label")" "$ok" "$(tb_json_escape "$detail")"
     else
         printf '%s %s (%s)\n' "$word" "$label" "$detail"
     fi

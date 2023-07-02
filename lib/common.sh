@@ -160,3 +160,14 @@ tb_civil_from_days() {
     fi
     printf '%s %s %s\n' "$y" "$m" "$d"
 }
+
+# tb_json_escape TEXT - escape TEXT for use inside a JSON string (backslash,
+# double quote and the control characters that can appear in one-line text)
+tb_json_escape() {
+    local s=${1//\\/\\\\}
+    s=${s//\"/\\\"}
+    s=${s//$'\t'/\\t}
+    s=${s//$'\r'/\\r}
+    s=${s//$'\n'/\\n}
+    printf '%s' "$s"
+}

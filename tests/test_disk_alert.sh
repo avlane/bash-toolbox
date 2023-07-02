@@ -74,6 +74,40 @@ test_bad_override_file() {
     assert_status 1 "missing file is an error" "$ROOT/bin/disk-alert.sh" -c "$WORK/nope"
 }
 
+# a curl that records its arguments and fails the first STUB_FAILS times
+cat > "$WORK/curl" <<'STUB'
+#!/bin/bash
+printf '%s\n' "$@" >> "$STUB_LOG"
+echo "--" >> "$STUB_LOG"
+n=$(cat "$STUB_LOG.n" 2>/dev/null || echo 0)
+echo $((n + 1)) > "$STUB_LOG.n"
+[ "$n" -ge "${STUB_FAILS:-0}" ]
+STUB
+chmod +x "$WORK/curl"
+
+test_webhook_receives_json() {
+    export CURL_BIN="$WORK/curl" STUB_LOG="$WORK/hook1" TB_SLEEP=true
+    "$ROOT/bin/disk-alert.sh" -w http://hooks.test/alert 90 >/dev/null
+    payload=$(grep '^{' "$STUB_LOG")
+    assert_eq '"alerts":["WARNING: /data is at 95% (/dev/disk2)"]}' "${payload#*,}" "alerts array"
+    assert_eq "1" "$(grep -c '^http://hooks.test/alert$' "$STUB_LOG")" "posted to the URL"
+}
+
+test_webhook_not_called_when_all_is_well() {
+    export CURL_BIN="$WORK/curl" STUB_LOG="$WORK/hook2" TB_SLEEP=true
+    "$ROOT/bin/disk-alert.sh" -w http://hooks.test/alert 99 >/dev/null
+    assert_eq "no" "$([ -e "$STUB_LOG" ] && echo yes || echo no)" "no request without findings"
+}
+
+test_webhook_is_retried_and_failure_keeps_exit_status() {
+    export CURL_BIN="$WORK/curl" STUB_LOG="$WORK/hook3" TB_SLEEP=true STUB_FAILS=2
+    rm -f "$WORK/hook3.n"
+    "$ROOT/bin/disk-alert.sh" -w http://hooks.test/alert 90 >/dev/null 2>&1 || status=$?
+    assert_eq "1" "${status:-0}" "exit status still reports the full disk"
+    assert_eq "3" "$(cat "$WORK/hook3.n")" "third attempt delivered"
+    unset STUB_FAILS
+}
+
 test_bad_threshold() {
     assert_status 2 "non numeric threshold" "$ROOT/bin/disk-alert.sh" lots
 }

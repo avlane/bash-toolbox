@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: disk-alert.sh [-i INODE_PERCENT] [-c FILE] [PERCENT]
+usage: disk-alert.sh [-i INODE_PERCENT] [-c FILE] [-w URL] [PERCENT]
 
 Print a line for every filesystem whose space usage is at or over PERCENT
 (default 90). With -i, also report filesystems whose inode usage is at or over
@@ -17,6 +17,11 @@ With -c, FILE holds per-mount overrides, one "MOUNTPOINT PERCENT" pair per
 line (blank lines and # comments are ignored; mount points cannot contain
 spaces). An override replaces PERCENT for that mount, in both checks.
 
+With -w, when anything is over a threshold the findings are also POSTed to URL
+as JSON ({"host": ..., "alerts": [...]}), for example to a chat webhook or a
+monitoring endpoint. The POST is retried up to 3 times with retry.sh; if it
+still fails a warning is printed and the exit status is unchanged.
+
 Exit status: 0 nothing over a threshold, 1 something is, 2 usage error.
 
 Set DF_CMD and DFI_CMD to replace the df commands (used by the tests).
@@ -25,11 +30,12 @@ USAGE
 
 tb_handle_help usage "$@"
 
-inode_limit= conf=
-while getopts ':i:c:h' opt; do
+inode_limit= conf= webhook=
+while getopts ':i:c:w:h' opt; do
     case $opt in
         i) inode_limit=$OPTARG ;;
         c) conf=$OPTARG ;;
+        w) webhook=$OPTARG ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
         *) tb_usage_error "unknown option -$OPTARG" ;;
@@ -102,20 +108,37 @@ parse_df() {
 }
 
 status=0
+alerts=()
+report() {
+    echo "$1"
+    alerts+=("$1")
+    status=1
+}
+
 while IFS=$'\t' read -r fs pct mount; do
     if (( ${pct%\%} >= $(limit_for "$mount" "$limit") )); then
-        echo "WARNING: $mount is at $pct ($fs)"
-        status=1
+        report "WARNING: $mount is at $pct ($fs)"
     fi
 done < <(${DF_CMD:-df -P} | parse_df first)
 
 if [[ -n $inode_limit ]]; then
     while IFS=$'\t' read -r fs pct mount; do
         if (( ${pct%\%} >= $(limit_for "$mount" "$inode_limit") )); then
-            echo "WARNING: $mount has used $pct of its inodes ($fs)"
-            status=1
+            report "WARNING: $mount has used $pct of its inodes ($fs)"
         fi
     done < <(${DFI_CMD:-df -P -i} | parse_df last)
+fi
+
+if [[ -n $webhook && $status -ne 0 ]]; then
+    items=
+    for a in "${alerts[@]}"; do
+        items="$items${items:+,}\"$(tb_json_escape "$a")\""
+    done
+    payload="{\"host\":\"$(tb_json_escape "$(hostname -s 2>/dev/null || hostname)")\",\"alerts\":[$items]}"
+    if ! "$(dirname "${BASH_SOURCE[0]}")/retry.sh" -t 3 -d 2 "${CURL_BIN:-curl}" -s -f --max-time 10 \
+            -X POST -H 'Content-Type: application/json' -d "$payload" "$webhook" >/dev/null; then
+        tb_warn "could not deliver the alert to $webhook"
+    fi
 fi
 
 exit $status
