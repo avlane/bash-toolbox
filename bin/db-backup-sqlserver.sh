@@ -85,22 +85,6 @@ sql_string() {
     printf "N'%s'" "${1//$q/$q$q}"
 }
 
-prune() {
-    local db=$1 n=0 old
-    (( keep > 0 )) || return 0
-    if [[ ! -d $dest ]]; then
-        tb_warn "$dest is not visible from here, not pruning old backups"
-        return 0
-    fi
-    while IFS= read -r old; do
-        n=$((n + 1))
-        if (( n > keep )); then
-            rm -f -- "$old"
-            echo "removed $old"
-        fi
-    done < <(ls -1t "$dest/$db"-*.bak 2>/dev/null || true)
-}
-
 status=0
 for db in "$@"; do
     file="$dest/$db-$(date +%Y%m%d-%H%M%S).bak"
@@ -114,7 +98,13 @@ for db in "$@"; do
     if sqlcmd "${conn[@]}" -Q "$query" &&
         { (( ! verify )) || sqlcmd "${conn[@]}" -Q "$check"; }; then
         echo "wrote $file"
-        prune "$db"
+        if (( keep > 0 )); then
+            if [[ -d $dest ]]; then
+                tb_prune_newest "$keep" "$dest" "$db" .bak
+            else
+                tb_warn "$dest is not visible from here, not pruning old backups"
+            fi
+        fi
     else
         tb_log "backup of $db failed (or did not verify)"
         status=1

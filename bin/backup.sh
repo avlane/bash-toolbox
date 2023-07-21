@@ -64,14 +64,4 @@ mv "$tmp" "$archive"
 tb_sha256 "$archive" > "$archive.sha256"
 echo "wrote $archive"
 
-if (( keep > 0 )); then
-    n=0
-    # newest first; the names are the ones generated above, so parsing ls is safe
-    while IFS= read -r old; do
-        n=$((n + 1))
-        if (( n > keep )); then
-            rm -f -- "$old" "$old.sha256"
-            echo "removed $old"
-        fi
-    done < <(ls -1t "$dest/$name"-*.tar.gz)
-fi
+tb_prune_newest "$keep" "$dest" "$name" .tar.gz

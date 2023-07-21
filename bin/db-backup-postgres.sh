@@ -62,18 +62,6 @@ if (( verify )); then
     tb_require_cmd pg_restore
 fi
 
-prune() {
-    local db=$1 n=0 old
-    (( keep > 0 )) || return 0
-    while IFS= read -r old; do
-        n=$((n + 1))
-        if (( n > keep )); then
-            rm -f -- "$old"
-            echo "removed $old"
-        fi
-    done < <(ls -1t "$dest/$db"-*.dump 2>/dev/null || true)
-}
-
 status=0
 for db in "$@"; do
     out="$dest/$db-$(date +%Y%m%d-%H%M%S).dump"
@@ -87,7 +75,7 @@ for db in "$@"; do
         { (( ! verify )) || pg_restore --list "$tmp" >/dev/null; }; then
         mv "$tmp" "$out"
         echo "wrote $out"
-        prune "$db"
+        tb_prune_newest "$keep" "$dest" "$db" .dump
     else
         rm -f "$tmp"
         tb_log "dump of $db failed (or did not verify)"

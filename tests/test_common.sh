@@ -71,4 +71,20 @@ test_now_can_be_pinned() {
     assert_eq "1700000000" "$(TB_NOW=1700000000 tb_now)" "TB_NOW overrides the clock"
 }
 
+test_prune_newest() {
+    d=$(mktemp -d "${TMPDIR:-/tmp}/prune-test.XXXXXX")
+    for n in 1 2 3 4; do
+        touch -t "20190${n}010000" "$d/db-20190${n}01-000000.bak"
+        touch "$d/db-20190${n}01-000000.bak.sha256"
+    done
+    touch "$d/other-20190101-000000.bak"
+    tb_prune_newest 2 "$d" db .bak >/dev/null
+    assert_eq "db-20190301-000000.bak
+db-20190401-000000.bak
+other-20190101-000000.bak" "$(ls "$d" | grep -v sha256)" "newest two of db kept, other prefix untouched"
+    tb_prune_newest 0 "$d" db .bak >/dev/null
+    assert_eq "3" "$(ls "$d" | grep -vc sha256)" "0 means keep everything"
+    rm -rf "$d"
+}
+
 run_tests

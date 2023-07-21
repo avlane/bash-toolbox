@@ -69,18 +69,6 @@ conn=()
 
 tb_require_cmd mysqldump gzip
 
-prune() {
-    local db=$1 n=0 old
-    (( keep > 0 )) || return 0
-    while IFS= read -r old; do
-        n=$((n + 1))
-        if (( n > keep )); then
-            rm -f -- "$old"
-            echo "removed $old"
-        fi
-    done < <(ls -1t "$dest/$db"-*.sql.gz 2>/dev/null || true)
-}
-
 status=0
 for db in "$@"; do
     out="$dest/$db-$(date +%Y%m%d-%H%M%S).sql.gz"
@@ -93,7 +81,7 @@ for db in "$@"; do
     if mysqldump ${defaults[@]+"${defaults[@]}"} ${conn[@]+"${conn[@]}"} --single-transaction --routines --triggers "$db" | gzip > "$tmp"; then
         mv "$tmp" "$out"
         echo "wrote $out"
-        prune "$db"
+        tb_prune_newest "$keep" "$dest" "$db" .sql.gz
     else
         rm -f "$tmp"
         tb_log "dump of $db failed"
