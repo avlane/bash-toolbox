@@ -39,6 +39,11 @@ if [ -n "${STUB_FAIL:-}" ] && [ "$STUB_FAIL" = "$db" ]; then exit 1; fi
 echo "-- dump of $db"
 STUB
 chmod +x "$WORK/bin/mysqldump"
+cat > "$WORK/bin/mysql" <<'STUB'
+#!/bin/bash
+printf 'information_schema\nmysql\nshop\nperformance_schema\nsys\nblog\n'
+STUB
+chmod +x "$WORK/bin/mysql"
 export PATH="$WORK/bin:$PATH"
 export STUB_LOG="$WORK/calls"
 
@@ -109,6 +114,14 @@ test_mysql_password_goes_through_option_file() {
         *'p"w'*) assert_eq "no password in arguments" "leaked" "password is not on the command line" ;;
         *) assert_eq 1 1 "password is not on the command line" ;;
     esac
+}
+
+test_mysql_all_databases_skips_system_schemas() {
+    : > "$STUB_LOG"
+    "$ROOT/bin/db-backup-mysql.sh" -A "$WORK/my4" >/dev/null
+    assert_eq "blog
+shop" "$(ls "$WORK/my4" | sed 's/-[0-9]*-[0-9]*\.sql\.gz$//' | sort)" "only user databases dumped"
+    assert_status 2 "-A with database names" "$ROOT/bin/db-backup-mysql.sh" -A "$WORK/my5" shop
 }
 
 test_mysql_failed_dump() {

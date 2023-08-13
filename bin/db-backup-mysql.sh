@@ -8,12 +8,17 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 usage: db-backup-mysql.sh [-H HOST] [-P PORT] [-u USER] [-k KEEP] [-n] DEST_DIR DATABASE...
+       db-backup-mysql.sh [options] -A DEST_DIR
 
 Dump each DATABASE with mysqldump (--single-transaction, so InnoDB tables are
 consistent without locking) and gzip it to
 DEST_DIR/DATABASE-YYYYmmdd-HHMMSS.sql.gz.
 
+With -A no database names are given: every database the server lists is dumped
+except the system schemas (information_schema, performance_schema, mysql, sys).
+
 options:
+  -A           dump all user databases
   -H HOST      server host
   -P PORT      server port
   -u USER      user name
@@ -30,10 +35,12 @@ USAGE
 tb_handle_help usage "$@"
 
 host= port= user=
+all=0
 keep=7
 dry=0
-while getopts ':H:P:u:k:nh' opt; do
+while getopts ':AH:P:u:k:nh' opt; do
     case $opt in
+        A) all=1 ;;
         H) host=$OPTARG ;;
         P) port=$OPTARG ;;
         u) user=$OPTARG ;;
@@ -47,7 +54,11 @@ done
 shift $((OPTIND - 1))
 
 [[ $keep =~ ^[0-9]+$ ]] || tb_usage_error "-k needs a number"
-[[ $# -ge 2 ]] || tb_usage_error "expected DEST_DIR and at least one DATABASE"
+if (( all )); then
+    [[ $# -eq 1 ]] || tb_usage_error "with -A give just DEST_DIR"
+else
+    [[ $# -ge 2 ]] || tb_usage_error "expected DEST_DIR and at least one DATABASE"
+fi
 dest=$1
 shift
 
@@ -69,8 +80,16 @@ conn=()
 
 tb_require_cmd mysqldump gzip
 
+databases=("$@")
+if (( all )); then
+    tb_require_cmd mysql
+    tb_readlines databases < <(mysql ${defaults[@]+"${defaults[@]}"} ${conn[@]+"${conn[@]}"} -N -B -e 'SHOW DATABASES' |
+        grep -v -x -e information_schema -e performance_schema -e mysql -e sys)
+    [[ ${#databases[@]} -gt 0 ]] || tb_die "the server lists no user databases"
+fi
+
 status=0
-for db in "$@"; do
+for db in "${databases[@]}"; do
     out="$dest/$db-$(date +%Y%m%d-%H%M%S).sql.gz"
     if (( dry )); then
         echo "would dump $db to $out"
