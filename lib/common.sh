@@ -182,8 +182,12 @@ tb_prune_newest() {
     while IFS= read -r old; do
         n=$((n + 1))
         if (( n > keep )); then
-            rm -f -- "$old" "$old.sha256"
+            if [[ -d $old ]]; then
+                rm -rf -- "$old"       # directory-format dumps
+            else
+                rm -f -- "$old" "$old.sha256"
+            fi
             echo "removed $old"
         fi
-    done < <(ls -1t "$dir/$prefix"-*"$suffix" 2>/dev/null || true)
+    done < <(ls -1td "$dir/$prefix"-*"$suffix" 2>/dev/null || true)
 }

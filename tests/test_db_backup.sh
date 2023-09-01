@@ -10,6 +10,7 @@ mkdir -p "$WORK/bin"
 cat > "$WORK/bin/pg_dump" <<'STUB'
 #!/bin/bash
 echo "$@" >> "$STUB_LOG"
+all=" $* "
 out=
 db=
 while [ $# -gt 0 ]; do
@@ -18,7 +19,10 @@ while [ $# -gt 0 ]; do
     shift
 done
 if [ -n "${STUB_FAIL:-}" ] && [ "$STUB_FAIL" = "$db" ]; then exit 1; fi
-echo "dump of $db" > "$out"
+case $all in
+    *" -Fd "*) mkdir -p "$out"; echo "dump of $db" > "$out/toc.dat" ;;
+    *) echo "dump of $db" > "$out" ;;
+esac
 STUB
 chmod +x "$WORK/bin/pg_dump"
 cat > "$WORK/bin/pg_restore" <<'STUB'
@@ -90,6 +94,33 @@ test_pg_verify() {
     assert_status 1 "unreadable dump fails" "$ROOT/bin/db-backup-postgres.sh" -V "$WORK/pg7" app
     unset STUB_RESTORE_FAIL
     assert_eq "0" "$(ls -A "$WORK/pg7" | wc -l | tr -d ' ')" "unverified dump is not kept"
+}
+
+test_pg_plain_and_directory_formats() {
+    "$ROOT/bin/db-backup-postgres.sh" -F plain "$WORK/pg8" app >/dev/null
+    assert_eq "1" "$(ls "$WORK/pg8" | grep -c '^app-.*\.sql$')" "plain dump has .sql"
+    : > "$STUB_LOG"
+    "$ROOT/bin/db-backup-postgres.sh" -F directory -j 4 "$WORK/pg9" app >/dev/null
+    assert_eq "1" "$(ls -d "$WORK/pg9"/app-*.dumpdir | wc -l | tr -d ' ')" "directory dump has .dumpdir"
+    assert_eq "1" "$(ls "$WORK/pg9"/app-*.dumpdir | grep -c toc.dat)" "directory dump contains its files"
+    case $(cat "$STUB_LOG") in
+        *"-Fd -j 4 -f "*) assert_eq 1 1 "format and jobs passed" ;;
+        *) assert_eq "-Fd -j 4 -f ..." "$(cat "$STUB_LOG")" "format and jobs passed" ;;
+    esac
+}
+
+test_pg_directory_retention_removes_directories() {
+    mkdir -p "$WORK/pg10/app-20190101-000000.dumpdir" "$WORK/pg10/app-20190201-000000.dumpdir"
+    touch -t 201901010000 "$WORK/pg10/app-20190101-000000.dumpdir"
+    touch -t 201902010000 "$WORK/pg10/app-20190201-000000.dumpdir"
+    "$ROOT/bin/db-backup-postgres.sh" -F directory -k 2 "$WORK/pg10" app >/dev/null
+    assert_eq "2" "$(ls "$WORK/pg10" | wc -l | tr -d ' ')" "oldest directory removed"
+}
+
+test_pg_option_checks() {
+    assert_status 2 "bad format" "$ROOT/bin/db-backup-postgres.sh" -F zip "$WORK/x" app
+    assert_status 2 "-j without directory format" "$ROOT/bin/db-backup-postgres.sh" -j 2 "$WORK/x" app
+    assert_status 2 "verify plain" "$ROOT/bin/db-backup-postgres.sh" -F plain -V "$WORK/x" app
 }
 
 test_pg_dry_run() {
