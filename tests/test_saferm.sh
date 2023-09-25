@@ -57,4 +57,23 @@ test_same_name_twice_in_one_second() {
 second" "$(cat "$SAFERM_TRASH"/* | sort)" "contents intact"
 }
 
+test_refuses_root_home_and_trash() {
+    mkdir -p "$WORK/home/docs"
+    export SAFERM_TRASH="$WORK/home/.trash"
+    mkdir -p "$SAFERM_TRASH"
+    for victim in / "$WORK/home" "$WORK/home/" "$SAFERM_TRASH" "$WORK/home/docs/.."; do
+        HOME="$WORK/home" assert_status 1 "refuses $victim" "$ROOT/bin/saferm.sh" "$victim"
+    done
+    assert_file_exists "$WORK/home/docs" "nothing was moved"
+    HOME="$WORK/home" assert_status 1 "refuses a directory that contains the trash" "$ROOT/bin/saferm.sh" "$WORK/home/../home"
+    export SAFERM_TRASH="$WORK/trash"
+}
+
+test_refused_path_does_not_stop_the_rest() {
+    mkdir -p "$WORK/home2"
+    echo x > "$WORK/home2/keep-me.txt"
+    HOME="$WORK/home2" "$ROOT/bin/saferm.sh" / "$WORK/home2/keep-me.txt" >/dev/null 2>&1 || true
+    assert_eq "no" "$([ -e "$WORK/home2/keep-me.txt" ] && echo yes || echo no)" "the valid file was still trashed"
+}
+
 run_tests

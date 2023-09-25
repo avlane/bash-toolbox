@@ -66,10 +66,42 @@ fi
 [[ $# -ge 1 ]] || tb_usage_error "no files given"
 (( dry )) || mkdir -p "$trash"
 
+# abs_path PATH - physical absolute path of an existing PATH (a final symlink is not followed)
+abs_path() {
+    local p=$1 dir base
+    if [[ -d $p && ! -L $p ]]; then
+        (cd "$p" && pwd -P)
+        return
+    fi
+    dir=$(cd "$(dirname "$p")" && pwd -P)
+    base=$(basename "$p")
+    if [[ $dir == / ]]; then printf '/%s\n' "$base"; else printf '%s/%s\n' "$dir" "$base"; fi
+}
+
+home_real=$(cd "$HOME" && pwd -P)
+if [[ -d $trash ]]; then trash_real=$(cd "$trash" && pwd -P); else trash_real=$trash; fi
+
+# protected_reason ABS_PATH - say why a path must never be trashed (empty if it is fine)
+protected_reason() {
+    if [[ $1 == / ]]; then
+        echo "it is the root directory"
+    elif [[ $1 == "$home_real" ]]; then
+        echo "it is your home directory"
+    elif [[ $1 == "$trash_real" || $trash_real == "$1"/* ]]; then
+        echo "it is, or contains, the trash directory"
+    fi
+}
+
 status=0
 for f in "$@"; do
     if [[ ! -e $f && ! -L $f ]]; then
         tb_warn "$f: no such file"
+        status=1
+        continue
+    fi
+    reason=$(protected_reason "$(abs_path "$f")")
+    if [[ -n $reason ]]; then
+        tb_warn "refusing to trash $f: $reason"
         status=1
         continue
     fi
