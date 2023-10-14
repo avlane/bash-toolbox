@@ -8,6 +8,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 usage: git-maint.sh [-n] [-a] [REPO]
+       git-maint.sh [-n] [-a] -r DIR
 
 Housekeeping for REPO (default: current directory):
   1. git remote prune <remote>   for every remote (forgets deleted branches)
@@ -15,7 +16,12 @@ Housekeeping for REPO (default: current directory):
   3. git reflog expire --expire=90.days.ago --all
   4. git gc --auto               (or, with -a, git gc --prune=2.weeks.ago)
 
+With -r, DIR is searched for repositories (directories containing .git, not
+looking inside them) and each one is maintained; a table of .git sizes before
+and after is printed at the end.
+
 options:
+  -r DIR      maintain every repository below DIR
   -a          run a full gc instead of gc --auto
   -n          dry run: print the commands without running them
   -h, --help  show this help
@@ -26,19 +32,19 @@ tb_handle_help usage "$@"
 
 dry=0
 full=0
-while getopts ':anh' opt; do
+root=
+while getopts ':anr:h' opt; do
     case $opt in
         a) full=1 ;;
         n) dry=1 ;;
+        r) root=$OPTARG ;;
         h) usage; exit 0 ;;
         *) tb_usage_error "unknown option -$OPTARG" ;;
     esac
 done
 shift $((OPTIND - 1))
 
-repo=${1:-.}
 tb_require_cmd git
-git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || tb_die "$repo is not a git repository"
 
 run() {
     echo "+ $(tb_quote_args "$@")"
@@ -47,13 +53,42 @@ run() {
     fi
 }
 
-for remote in $(git -C "$repo" remote); do
-    run git -C "$repo" remote prune "$remote"
-done
-run git -C "$repo" worktree prune
-run git -C "$repo" reflog expire --expire=90.days.ago --all
-if (( full )); then
-    run git -C "$repo" gc --prune=2.weeks.ago
+# git_kib REPO - size of the repository's .git in KiB
+git_kib() {
+    du -sk "$1/.git" 2>/dev/null | awk '{print $1}'
+}
+
+maintain() {
+    local repo=$1 remote
+    for remote in $(git -C "$repo" remote); do
+        run git -C "$repo" remote prune "$remote"
+    done
+    run git -C "$repo" worktree prune
+    run git -C "$repo" reflog expire --expire=90.days.ago --all
+    if (( full )); then
+        run git -C "$repo" gc --prune=2.weeks.ago
+    else
+        run git -C "$repo" gc --auto
+    fi
+}
+
+if [[ -n $root ]]; then
+    [[ $# -eq 0 ]] || tb_usage_error "-r takes the place of REPO"
+    [[ -d $root ]] || tb_die "$root is not a directory"
+    tb_readlines repos < <(find "$root" -name .git -type d -prune | sed 's|/\.git$||' | sort)
+    [[ ${#repos[@]} -gt 0 ]] || tb_die "no repositories found below $root"
+    summary=()
+    for repo in "${repos[@]}"; do
+        echo "== $repo"
+        before=$(git_kib "$repo")
+        maintain "$repo"
+        summary+=("$(printf '%8s -> %8s KiB  %s' "$before" "$(git_kib "$repo")" "$repo")")
+    done
+    echo
+    echo "   before ->    after       repository"
+    printf '%s\n' "${summary[@]}"
 else
-    run git -C "$repo" gc --auto
+    repo=${1:-.}
+    git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || tb_die "$repo is not a git repository"
+    maintain "$repo"
 fi
