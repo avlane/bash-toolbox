@@ -3,6 +3,17 @@
 Small shell scripts I keep reaching for: backups, log handling, disk checks and
 a few other chores. Nothing here is clever, it is just written down once.
 
+## Contents
+
+- [Scripts](#scripts)
+- [Examples](#examples)
+- [Exit codes](#exit-codes)
+- [Tests](#tests)
+- [Continuous integration](#continuous-integration)
+- [Portability](#portability)
+
+See `CHANGELOG.md` for what changed when.
+
 ## Scripts
 
 All scripts live in `bin/`. Every script supports `--help` (or `-h`) and exits 2
@@ -10,19 +21,20 @@ on a usage error. Shared helpers are in `lib/common.sh`.
 
 | script | what it does |
 | --- | --- |
-| `backup.sh [-n] [-k N] [-x PAT] SRC DEST` | tar+gzip `SRC` into `DEST/NAME-DATE.tar.gz`, atomically; optionally keep only the newest N |
-| `rotate-backups.sh [-n] [-p GLOB] DIR DAYS` | delete matching files (default `*.tar.gz`) older than `DAYS` days, always keeping the last one |
-| `rotate-logs.sh [-k N] FILE...` | numbered copy-and-truncate rotation |
-| `disk-alert.sh [-i PCT] [-c FILE] [PCT]` | filesystems at or over `PCT` percent (default 90), optionally inode usage and per-mount overrides; exit 1 if any |
+| `backup.sh [-n] [-k N] [-x PAT] SRC DEST` | tar+gzip `SRC` into `DEST/NAME-DATE.tar.gz` with a `.sha256`, atomically; optionally keep only the newest N |
+| `restore-backup.sh [-f] [-l] ARCHIVE DEST` | verify the checksum, refuse absolute or `..` paths, extract into an empty directory |
+| `rotate-backups.sh [-n] [-p GLOB] DIR DAYS` | delete matching files (default `*.tar.gz`) older than `DAYS` days, always keeping the last one; `-g D,W,M` thins by day/week/month instead |
+| `rotate-logs.sh [-k N] [-s SIZE] [-a DAYS] [-z gzip\|xz] FILE...` | numbered copy-and-truncate rotation with size/age triggers and compression |
+| `disk-alert.sh [-i PCT] [-c FILE] [-w URL] [PCT]` | filesystems at or over `PCT` percent (default 90), optionally inode usage and per-mount overrides; exit 1 if any |
 | `saferm.sh [-n] [-v] FILE...` / `-P DAYS` | move files to `~/.saferm-trash` (or `$SAFERM_TRASH`) as `NAME.EPOCH`; `-P` purges old entries |
 | `tail-logs.sh [-n N] [-g RE] [-c] [-F] FILE...` | follow several logs, each line prefixed with the file name |
 | `healthcheck.sh HOST PORT` / `-u URL` / `-f FILE` | TCP or HTTP checks, optional JSON output; exit 0 healthy, 1 unhealthy |
 | `retry.sh [-t N] [-d S] [-j] [-r CODES] CMD...` | run a command again with exponential backoff, optional jitter and exit-code filter |
 | `json-get.sh [-r] KEY [FILE]` | read a value from JSON; uses jq, with a limited pure-bash fallback |
-| `gen-systemd.sh -n NAME -c CMD [-t CALENDAR]` | print a systemd service unit, and a timer with `-t` |
-| `db-backup-postgres.sh [-V] [-k N] DEST DB...` | `pg_dump` custom-format dumps with retention and optional verify |
-| `db-backup-mysql.sh [-k N] DEST DB...` | `mysqldump` + gzip with retention; password via option file, never argv |
-| `git-maint.sh [-n] [-a] [REPO]` | prune, reflog expire and gc |
+| `gen-systemd.sh -n NAME -c CMD [-t CALENDAR] [-H] [-i] [-V]` | print a systemd service unit, and a timer with `-t`; sandboxing, user install and verification |
+| `db-backup-postgres.sh [-F FMT] [-j N] [-V] [-k N] DEST DB...` | `pg_dump` dumps (custom, plain or directory) with retention and optional verify |
+| `db-backup-mysql.sh [-A] [-k N] DEST DB...` | `mysqldump` + gzip with retention, `-A` for all user databases; password via option file, never argv |
+| `git-maint.sh [-n] [-a] [REPO]` / `-r DIR` | prune, reflog expire and gc |
 | `git-stale-branches.sh [-d DAYS] [-m BASE] [-s] [REPO]` | stale local branches, oldest first; optionally only merged ones, with a per-author count |
 | `ssh-audit.sh [-d DIR] [-H HOSTS] [-s] [-v]` | key permissions, missing passphrases, weak keys, duplicate authorized_keys, unhashed known_hosts |
 | `bootstrap-dotfiles.sh [-n] [-t DIR] [-m MANIFEST] DIR` | link entries of `DIR` as `~/.name`, idempotent, keeping `.bak` copies |
