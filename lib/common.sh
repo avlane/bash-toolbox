@@ -6,16 +6,39 @@
 
 tb_prog=${tb_prog:-$(basename "$0")}
 
+# Colour is used for warnings and errors only when standard error is a terminal,
+# TERM is not "dumb" and NO_COLOR is not set (https://no-color.org). TB_FORCE_COLOR=1
+# turns it on regardless, which the tests use.
+tb_use_color() {
+    [[ -z ${NO_COLOR:-} ]] || return 1
+    [[ -n ${TB_FORCE_COLOR:-} ]] && return 0
+    [[ -t 2 && ${TERM:-dumb} != dumb ]]
+}
+
+# tb_log_level COLOR_CODE LEVEL MESSAGE... - the common part of tb_log/tb_warn/tb_die
+tb_log_level() {
+    local code=$1 level=$2 stamp
+    shift 2
+    stamp=$(date '+%Y-%m-%dT%H:%M:%S')
+    if [[ -n $level ]] && tb_use_color; then
+        printf '%s %s: \033[%sm%s: %s\033[0m\n' "$stamp" "$tb_prog" "$code" "$level" "$*" >&2
+    elif [[ -n $level ]]; then
+        printf '%s %s: %s: %s\n' "$stamp" "$tb_prog" "$level" "$*" >&2
+    else
+        printf '%s %s: %s\n' "$stamp" "$tb_prog" "$*" >&2
+    fi
+}
+
 tb_log() {
-    printf '%s %s: %s\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$tb_prog" "$*" >&2
+    tb_log_level 0 '' "$*"
 }
 
 tb_warn() {
-    tb_log "WARNING: $*"
+    tb_log_level 33 WARNING "$*"
 }
 
 tb_die() {
-    tb_log "ERROR: $*"
+    tb_log_level 31 ERROR "$*"
     exit 1
 }
 

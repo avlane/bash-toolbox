@@ -87,4 +87,20 @@ other-20190101-000000.bak" "$(ls "$d" | grep -v sha256)" "newest two of db kept,
     rm -rf "$d"
 }
 
+test_warnings_are_plain_without_a_terminal() {
+    out=$(unset TB_FORCE_COLOR NO_COLOR; tb_warn "disk low" 2>&1)
+    case $out in
+        *"WARNING: disk low") assert_eq 1 1 "plain text when stderr is not a terminal" ;;
+        *) assert_eq "... WARNING: disk low" "$out" "plain text when stderr is not a terminal" ;;
+    esac
+    case $out in *$'\033'*) assert_eq "no escape codes" "has escapes" "no colour without a terminal" ;; *) assert_eq 1 1 "no colour without a terminal" ;; esac
+}
+
+test_force_color_and_no_color() {
+    out=$(unset NO_COLOR; TB_FORCE_COLOR=1 tb_warn "disk low" 2>&1)
+    case $out in *$'\033[33mWARNING: disk low'*) assert_eq 1 1 "forced colour" ;; *) assert_eq "yellow warning" "$out" "forced colour" ;; esac
+    out=$(NO_COLOR=1 TB_FORCE_COLOR=1 tb_warn "disk low" 2>&1)
+    case $out in *$'\033'*) assert_eq "plain" "coloured" "NO_COLOR wins over TB_FORCE_COLOR" ;; *) assert_eq 1 1 "NO_COLOR wins over TB_FORCE_COLOR" ;; esac
+}
+
 run_tests
