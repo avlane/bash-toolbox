@@ -214,3 +214,35 @@ tb_prune_newest() {
         fi
     done < <(ls -1td "$dir/$prefix"-*"$suffix" 2>/dev/null || true)
 }
+
+# tb_run_timeout SECONDS COMMAND... - run COMMAND, kill it after SECONDS and return
+# 124 in that case (the same convention as GNU timeout, which macOS does not
+# ship). Redirections on the call apply to COMMAND. The watchdog wakes every
+# second so it never outlives the command by more than that.
+tb_run_timeout() {
+    local secs=$1 pid dog flag rc=0
+    shift
+    flag=$(mktemp "${TMPDIR:-/tmp}/tb-timeout.XXXXXX")
+    rm -f "$flag"       # it exists only if the watchdog fires
+    "$@" &
+    pid=$!
+    (
+        i=0
+        while (( i < secs )); do
+            sleep 1
+            kill -0 "$pid" 2>/dev/null || exit 0
+            i=$((i + 1))
+        done
+        : > "$flag"
+        kill -TERM "$pid" 2>/dev/null
+    ) &
+    dog=$!
+    wait "$pid" || rc=$?
+    kill "$dog" 2>/dev/null || true
+    wait "$dog" 2>/dev/null || true
+    if [[ -e $flag ]]; then
+        rm -f "$flag"
+        return 124
+    fi
+    return "$rc"
+}

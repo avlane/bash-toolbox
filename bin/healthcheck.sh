@@ -8,6 +8,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 usage: healthcheck.sh [-t SECONDS] [-j] HOST PORT
+       healthcheck.sh [-t SECONDS] [-j] -s [-x DAYS] HOST PORT
        healthcheck.sh [-t SECONDS] [-j] [-e STATUS] [-m TEXT] -u URL
        healthcheck.sh [-t SECONDS] [-j] -f FILE
 
@@ -17,14 +18,22 @@ check every target listed in FILE; lines look like
 
     tcp db01.example.org 5432
     http https://app.example.org/health 200
+    tls app.example.org 443 21
 
 and blank lines and # comments are ignored. For http lines the status is
-optional (default: any 2xx or 3xx).
+optional (default: any 2xx or 3xx). For tls lines the number of days is
+optional (default 14).
+
+With -s the TLS certificate served on HOST:PORT must be valid for at least DAYS
+more days (needs openssl; the certificate chain is not validated, only its
+expiry date is checked).
 
 options:
   -u URL      HTTP(S) URL to request
   -e STATUS   expected HTTP status (default: any 2xx or 3xx)
   -m TEXT     the response body must contain TEXT
+  -s          check the TLS certificate's expiry instead of just connecting
+  -x DAYS     with -s, required remaining validity in days (default 14)
   -f FILE     check all targets in FILE
   -j          print one JSON object per target instead of text
   -t SECONDS  timeout per check (default 5)
@@ -43,13 +52,17 @@ match=
 file=
 json=0
 timeout=5
-while getopts ':u:e:m:f:t:jh' opt; do
+tls=0
+tls_days=14
+while getopts ':u:e:m:f:t:x:sjh' opt; do
     case $opt in
         u) url=$OPTARG ;;
         e) expect=$OPTARG ;;
         m) match=$OPTARG ;;
         f) file=$OPTARG ;;
         j) json=1 ;;
+        s) tls=1 ;;
+        x) tls_days=$OPTARG ;;
         t) timeout=$OPTARG ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
@@ -59,6 +72,7 @@ done
 shift $((OPTIND - 1))
 
 [[ $timeout =~ ^[0-9]+$ ]] || tb_usage_error "-t needs a whole number of seconds"
+[[ $tls_days =~ ^[0-9]+$ ]] || tb_usage_error "-x needs a whole number of days"
 
 # Each check sets $detail (a short human readable result) and returns 0 or 1.
 detail=
@@ -70,6 +84,31 @@ check_tcp() {
         detail="accepting connections"
     else
         detail="not accepting connections"
+        return 1
+    fi
+}
+
+# check_tls HOST PORT [DAYS] - the certificate must still be valid in DAYS days
+check_tls() {
+    local host=$1 port=$2 days=${3:-14} out end
+    tb_require_cmd openssl
+    out=$(mktemp "${TMPDIR:-/tmp}/healthcheck.XXXXXX")
+    tb_run_timeout "$timeout" openssl s_client -connect "$host:$port" -servername "$host" </dev/null >"$out" 2>/dev/null || true
+    end=$(openssl x509 -noout -enddate <"$out" 2>/dev/null) || {
+        detail="no certificate received"
+        rm -f "$out"
+        return 1
+    }
+    end=${end#notAfter=}
+    if openssl x509 -noout -checkend $((days * 86400)) <"$out" >/dev/null 2>&1; then
+        detail="certificate valid until $end"
+        rm -f "$out"
+    else
+        detail="certificate expires $end, less than $days days away"
+        if ! openssl x509 -noout -checkend 0 <"$out" >/dev/null 2>&1; then
+            detail="certificate expired on $end"
+        fi
+        rm -f "$out"
         return 1
     fi
 }
@@ -120,6 +159,7 @@ run_one() {   # run_one KIND ARGS...
     shift
     case $kind in
         tcp) check_tcp "$1" "$2" || rc=$?; report "$1:$2" "$rc" ;;
+        tls) check_tls "$@" || rc=$?; report "$1:$2 (tls)" "$rc" ;;
         http) check_http "$@" || rc=$?; report "$1" "$rc" ;;
     esac
 }
@@ -127,13 +167,15 @@ run_one() {   # run_one KIND ARGS...
 if [[ -n $file ]]; then
     [[ $# -eq 0 && -z $url ]] || tb_usage_error "-f cannot be combined with other targets"
     [[ -r $file ]] || tb_die "cannot read $file"
-    while read -r kind a b _; do
+    while read -r kind a b c _; do
         if [[ -z $kind || $kind == \#* ]]; then
             continue
         fi
         case $kind in
             tcp) [[ -n ${a:-} && -n ${b:-} ]] || tb_die "bad line in $file: $kind $a $b"
                  run_one tcp "$a" "$b" ;;
+            tls) [[ -n ${a:-} && -n ${b:-} ]] || tb_die "bad line in $file: $kind $a $b"
+                 run_one tls "$a" "$b" "${c:-}" ;;
             http) [[ -n ${a:-} ]] || tb_die "bad line in $file: $kind"
                   run_one http "$a" "$b" ;;
             *) tb_die "unknown check type in $file: $kind" ;;
@@ -144,7 +186,11 @@ elif [[ -n $url ]]; then
     run_one http "$url" "$expect" "$match"
 else
     [[ $# -eq 2 ]] || tb_usage_error "expected HOST PORT, -u URL or -f FILE"
-    run_one tcp "$1" "$2"
+    if (( tls )); then
+        run_one tls "$1" "$2" "$tls_days"
+    else
+        run_one tcp "$1" "$2"
+    fi
 fi
 
 (( failures == 0 ))
