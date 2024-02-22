@@ -237,7 +237,7 @@ tb_run_timeout() {
         kill -TERM "$pid" 2>/dev/null
     ) &
     dog=$!
-    wait "$pid" || rc=$?
+    wait "$pid" 2>/dev/null || rc=$?
     kill "$dog" 2>/dev/null || true
     wait "$dog" 2>/dev/null || true
     if [[ -e $flag ]]; then

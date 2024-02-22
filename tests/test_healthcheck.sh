@@ -83,6 +83,44 @@ test_bad_targets_file() {
     assert_status 1 "missing file" "$ROOT/bin/healthcheck.sh" -f "$WORK/nope"
 }
 
+# stub openssl: s_client prints a fake certificate, x509 answers from STUB_* variables
+cat > "$WORK/bin/openssl" <<'STUB'
+#!/bin/bash
+case $1 in
+    s_client) [ "${STUB_NO_CERT:-}" ] && exit 1; echo "-----BEGIN CERTIFICATE-----"; echo "fake"; echo "-----END CERTIFICATE-----" ;;
+    x509)
+        grep -q fake || exit 1
+        case $* in
+            *-enddate*) echo "notAfter=Jun  1 12:00:00 2030 GMT" ;;
+            *"-checkend 0"*) [ -z "${STUB_EXPIRED:-}" ] ;;
+            *-checkend*) [ -z "${STUB_SOON:-}" ] && [ -z "${STUB_EXPIRED:-}" ] ;;
+        esac ;;
+esac
+STUB
+chmod +x "$WORK/bin/openssl"
+
+test_tls_valid_certificate() {
+    out=$(PATH="$WORK/bin:$PATH" "$ROOT/bin/healthcheck.sh" -s host.test 443)
+    assert_eq "OK host.test:443 (tls) (certificate valid until Jun  1 12:00:00 2030 GMT)" "$out" "valid certificate"
+}
+
+test_tls_expiring_and_expired() {
+    out=$(STUB_SOON=1 PATH="$WORK/bin:$PATH" "$ROOT/bin/healthcheck.sh" -s -x 30 host.test 443 || true)
+    assert_eq "FAIL host.test:443 (tls) (certificate expires Jun  1 12:00:00 2030 GMT, less than 30 days away)" "$out" "expiring soon"
+    out=$(STUB_EXPIRED=1 PATH="$WORK/bin:$PATH" "$ROOT/bin/healthcheck.sh" -s host.test 443 || true)
+    assert_eq "FAIL host.test:443 (tls) (certificate expired on Jun  1 12:00:00 2030 GMT)" "$out" "already expired"
+}
+
+test_tls_no_certificate() {
+    STUB_NO_CERT=1 PATH="$WORK/bin:$PATH" assert_status 1 "connection without certificate" "$ROOT/bin/healthcheck.sh" -s host.test 443
+}
+
+test_tls_line_in_targets_file() {
+    printf 'tls host.test 443 90\n' > "$WORK/tlsfile"
+    STUB_SOON=1 PATH="$WORK/bin:$PATH" assert_status 1 "days column is honoured" "$ROOT/bin/healthcheck.sh" -f "$WORK/tlsfile"
+    PATH="$WORK/bin:$PATH" assert_status 0 "valid certificate in file mode" "$ROOT/bin/healthcheck.sh" -f "$WORK/tlsfile"
+}
+
 test_usage_errors() {
     assert_status 2 "no arguments" "$ROOT/bin/healthcheck.sh"
     assert_status 2 "url and host together" "$ROOT/bin/healthcheck.sh" -u http://x/ host 80

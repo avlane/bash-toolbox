@@ -103,4 +103,18 @@ test_force_color_and_no_color() {
     case $out in *$'\033'*) assert_eq "plain" "coloured" "NO_COLOR wins over TB_FORCE_COLOR" ;; *) assert_eq 1 1 "NO_COLOR wins over TB_FORCE_COLOR" ;; esac
 }
 
+test_run_timeout() {
+    assert_status 0 "fast command passes through" tb_run_timeout 5 true
+    assert_status 3 "exit status is preserved" tb_run_timeout 5 bash -c 'exit 3'
+    SECONDS=0
+    tb_run_timeout 1 sleep 10
+    rc=$?
+    assert_eq "124" "$rc" "slow command is killed with status 124"
+    if [ "$SECONDS" -lt 5 ]; then
+        assert_eq 1 1 "and quickly"
+    else
+        assert_eq "under 5s" "${SECONDS}s" "and quickly"
+    fi
+}
+
 run_tests
