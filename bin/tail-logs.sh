@@ -7,10 +7,11 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: tail-logs.sh [-n LINES] [-g PATTERN] [-c] [-F] FILE...
+usage: tail-logs.sh [-n LINES] [-g PATTERN] [-c] [-F] FILE|DIR...
 
 Show the last LINES lines (default 10) of every FILE and keep following them,
-prefixing each line with the file's base name.
+prefixing each line with the file's base name. A DIR stands for the *.log files
+directly inside it (at the time of the call; files created later are not picked up).
 
 options:
   -n LINES    lines of history to show first (default 10)
@@ -43,6 +44,22 @@ shift $((OPTIND - 1))
 [[ $lines =~ ^[0-9]+$ ]] || tb_usage_error "-n needs a number"
 [[ $# -ge 1 ]] || tb_usage_error "no files given"
 
+files=()
+for arg in "$@"; do
+    if [[ -d $arg ]]; then
+        found=0
+        for f in "$arg"/*.log; do
+            [[ -f $f ]] || continue
+            files+=("$f")
+            found=1
+        done
+        (( found )) || tb_warn "no *.log files in $arg"
+    else
+        files+=("$arg")
+    fi
+done
+[[ ${#files[@]} -gt 0 ]] || tb_die "nothing to follow"
+
 [[ -t 1 ]] || color=0
 palette=(31 32 33 34 35 36)
 
@@ -56,7 +73,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 i=0
-for f in "$@"; do
+for f in "${files[@]}"; do
     name=$(basename "$f")
     prefix="[$name]"
     if (( color )); then

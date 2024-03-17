@@ -39,6 +39,23 @@ test_pattern_filters() {
 [a.log] old a" "$(cat "$WORK/sorted")" "only matching lines are shown"
 }
 
+test_directory_expands_to_log_files() {
+    mkdir -p "$WORK/logs"
+    printf 'old a\n' > "$WORK/a.log"
+    cp "$WORK/a.log" "$WORK/logs/a.log"
+    printf 'other\n' > "$WORK/logs/notes.txt"
+    "$ROOT/bin/tail-logs.sh" -n 1 "$WORK/logs" > "$WORK/out3" 2>&1 &
+    pid=$!
+    sleep 1
+    kill "$pid"; wait "$pid" 2>/dev/null || true
+    assert_eq "[a.log] old a" "$(cat "$WORK/out3")" "only the .log file is followed"
+}
+
+test_empty_directory() {
+    mkdir -p "$WORK/emptylogs"
+    assert_status 1 "directory without logs" "$ROOT/bin/tail-logs.sh" "$WORK/emptylogs"
+}
+
 test_usage_errors() {
     assert_status 2 "no files" "$ROOT/bin/tail-logs.sh"
     assert_status 2 "bad -n" "$ROOT/bin/tail-logs.sh" -n many "$WORK/a.log"
