@@ -60,6 +60,18 @@ test_wrong_symlink_is_replaced_without_backup() {
     assert_eq "0" "$(ls -A "$WORK/stale/home" | grep -c '\.bak$')" "a dangling link is not worth a .bak"
 }
 
+test_host_overlay_wins() {
+    fresh host
+    mkdir -p "$WORK/host/repo/hosts/laptop" "$WORK/host/repo/hosts/server"
+    echo "laptop vimrc" > "$WORK/host/repo/hosts/laptop/vimrc"
+    echo "server only" > "$WORK/host/repo/hosts/server/tmux.conf"
+    "$BS" -H laptop -t "$WORK/host/home" "$WORK/host/repo" >/dev/null
+    assert_eq "laptop vimrc" "$(cat "$WORK/host/home/.vimrc")" "overlay file is linked"
+    assert_eq "export A=1" "$(cat "$WORK/host/home/.profile")" "files without overlay come from the top level"
+    assert_eq "no" "$([ -e "$WORK/host/home/.hosts" ] && echo yes || echo no)" "hosts directory is not linked"
+    assert_eq "no" "$([ -e "$WORK/host/home/.tmux.conf" ] && echo yes || echo no)" "other hosts' files are ignored"
+}
+
 test_usage_error() {
     assert_status 2 "no directory" "$BS"
 }
