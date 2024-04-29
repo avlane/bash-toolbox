@@ -90,4 +90,20 @@ test_strict_flags_rsa_2048() {
     assert_status 1 "2048-bit RSA fails with -s" "$ROOT/bin/ssh-audit.sh" -s -d "$d"
 }
 
+test_json_output() {
+    d="$WORK/json"
+    mkdir -p "$d" && chmod 700 "$d"
+    ssh-keygen -q -t ed25519 -N '' -f "$d/id_ed25519"
+    out=$("$ROOT/bin/ssh-audit.sh" -j -v -d "$d" || true)
+    case $out in
+        '{"directory":"'"$d"'","findings":[{"path":"'"$d"'/id_ed25519","message":"private key has no passphrase"}],"keys":[{"path":"'"$d"'/id_ed25519","type":"ED25519","bits":256,"fingerprint":"SHA256:'*'"}]}')
+            assert_eq 1 1 "findings and keys in one document" ;;
+        *) assert_eq "one JSON document" "$out" "findings and keys in one document" ;;
+    esac
+    assert_status 1 "exit status still reflects the findings" "$ROOT/bin/ssh-audit.sh" -j -d "$d"
+    ssh-keygen -q -p -N 'new pass phrase' -f "$d/id_ed25519" >/dev/null
+    out=$("$ROOT/bin/ssh-audit.sh" -j -d "$d")
+    assert_eq '{"directory":"'"$d"'","findings":[],"keys":[]}' "$out" "clean directory gives empty arrays"
+}
+
 run_tests

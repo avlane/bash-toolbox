@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: ssh-audit.sh [-d SSH_DIR] [-H HOSTS_FILE] [-s] [-v]
+usage: ssh-audit.sh [-d SSH_DIR] [-H HOSTS_FILE] [-s] [-v] [-j]
 
 Checks, in SSH_DIR (default ~/.ssh):
   - the directory is not accessible by group or others
@@ -19,10 +19,14 @@ Checks, in SSH_DIR (default ~/.ssh):
   - with -H: hosts from HOSTS_FILE (one per line) that are not in known_hosts
 
 Prints one line per finding. Exit status is 1 if anything was found, else 0.
+With -j the result is one JSON document instead, for scripts and dashboards:
+{"directory": ..., "findings": [{"path": ..., "message": ...}], "keys": [...]}
+where "keys" is only filled in together with -v.
 
 options:
   -d DIR      directory to audit
   -s          strict: also flag RSA keys smaller than 3072 bits
+  -j          print the result as JSON
   -v          list every private key with its type, size and fingerprint
   -H FILE     list of host names that should already be in known_hosts
   -h, --help  show this help
@@ -35,12 +39,14 @@ dir=$HOME/.ssh
 hosts_file=
 strict=0
 verbose=0
-while getopts ':d:H:svh' opt; do
+json=0
+while getopts ':d:H:svjh' opt; do
     case $opt in
         d) dir=$OPTARG ;;
         H) hosts_file=$OPTARG ;;
         s) strict=1 ;;
         v) verbose=1 ;;
+        j) json=1 ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
         *) tb_usage_error "unknown option -$OPTARG" ;;
@@ -52,9 +58,15 @@ shift $((OPTIND - 1))
 tb_require_cmd ssh-keygen
 
 findings=0
+json_findings=
+json_keys=
 finding() {
-    echo "$1: $2"
     findings=$((findings + 1))
+    if (( json )); then
+        json_findings="$json_findings${json_findings:+,}{\"path\":\"$(tb_json_escape "$1")\",\"message\":\"$(tb_json_escape "$2")\"}"
+    else
+        echo "$1: $2"
+    fi
 }
 
 # open_to_others PATH - true if group or other have any permission bit
@@ -93,7 +105,12 @@ for key in "$dir"/*; do
         type=${type%)}
         if (( verbose )); then
             fingerprint=${info#* }
-            echo "$key: $type $bits ${fingerprint%% *}"
+            fingerprint=${fingerprint%% *}
+            if (( json )); then
+                json_keys="$json_keys${json_keys:+,}{\"path\":\"$(tb_json_escape "$key")\",\"type\":\"$type\",\"bits\":$bits,\"fingerprint\":\"$fingerprint\"}"
+            else
+                echo "$key: $type $bits $fingerprint"
+            fi
         fi
         case $type in
             DSA) finding "$key" "DSA keys are weak, replace with ed25519" ;;
@@ -138,5 +155,9 @@ if [[ -n $hosts_file ]]; then
     done < "$hosts_file"
 fi
 
+if (( json )); then
+    printf '{"directory":"%s","findings":[%s],"keys":[%s]}\n' "$(tb_json_escape "$dir")" "$json_findings" "$json_keys"
+    exit $(( findings == 0 ? 0 : 1 ))
+fi
 (( findings == 0 )) || exit 1
 echo "no findings in $dir"
