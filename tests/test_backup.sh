@@ -33,6 +33,28 @@ test_prune_removes_checksum_too() {
     assert_eq "2" "$(ls "$WORK/pcdest" | wc -l | tr -d ' ')" "only the new archive and its checksum remain"
 }
 
+test_dot_as_source() {
+    mkdir -p "$WORK/dot/proj"
+    echo data > "$WORK/dot/proj/f"
+    out=$(cd "$WORK/dot/proj" && "$ROOT/bin/backup.sh" . "$WORK/dotdest")
+    archive=${out#wrote }
+    case $(basename "$archive") in
+        proj-*.tar.gz) assert_eq 1 1 "archive is named after the directory, not after '.'" ;;
+        *) assert_eq "proj-*.tar.gz" "$(basename "$archive")" "archive is named after the directory, not after '.'" ;;
+    esac
+    assert_eq "proj/f" "$(tar -tzf "$archive" | grep -v '/$')" "contents are under the directory name"
+}
+
+test_relative_parent_as_source() {
+    mkdir -p "$WORK/rel/proj" "$WORK/rel/other"
+    echo data > "$WORK/rel/proj/f"
+    out=$(cd "$WORK/rel/other" && "$ROOT/bin/backup.sh" ../proj "$WORK/reldest")
+    case $(basename "${out#wrote }") in
+        proj-*.tar.gz) assert_eq 1 1 "../proj is archived as proj" ;;
+        *) assert_eq "proj-*.tar.gz" "$out" "../proj is archived as proj" ;;
+    esac
+}
+
 test_missing_source_fails() {
     assert_status 1 "missing source dir" "$ROOT/bin/backup.sh" "$WORK/nope" "$WORK/dest"
 }

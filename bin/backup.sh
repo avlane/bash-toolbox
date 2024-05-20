@@ -46,6 +46,9 @@ shift $((OPTIND - 1))
 src=${1%/}
 dest=$2
 [[ -d $src ]] || tb_die "$src is not a directory"
+# resolve '.', '..' and relative paths so the archive is named after the real directory
+src=$(cd "$src" && pwd -P)
+[[ $src != / ]] || tb_die "refusing to back up the root directory"
 
 name=$(basename "$src")
 archive="$dest/$name-$(date +%Y%m%d-%H%M%S).tar.gz"
