@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: retry.sh [-t TRIES] [-d DELAY] [-m MAXDELAY] [-j] [-r CODES] [--] COMMAND [ARGS...]
+usage: retry.sh [-t TRIES] [-d DELAY] [-m MAXDELAY] [-T SECONDS] [-j] [-r CODES] [--] COMMAND [ARGS...]
 
 Run COMMAND until it exits 0. After each failure wait DELAY seconds, doubling
 the wait every time up to MAXDELAY. Exits 0 on success, or with the exit status
@@ -17,6 +17,9 @@ options:
   -t TRIES     maximum attempts (default 5)
   -d DELAY     first delay in seconds (default 1)
   -m MAXDELAY  upper bound for the delay (default 60)
+  -T SECONDS   kill an attempt that runs longer than this; that attempt counts
+               as failed with status 124, like GNU timeout. COMMAND must be an
+               executable, not a shell function (it runs in a child process)
   -j           add random jitter of up to half the delay, so many clients
                retrying together do not all hit the server at the same moment
   -r CODES     only retry when the exit status is one of CODES (comma
@@ -35,11 +38,13 @@ delay=1
 maxdelay=60
 jitter=0
 retry_codes=
-while getopts ':t:d:m:jr:h' opt; do
+attempt_timeout=
+while getopts ':t:d:m:T:jr:h' opt; do
     case $opt in
         t) tries=$OPTARG ;;
         d) delay=$OPTARG ;;
         m) maxdelay=$OPTARG ;;
+        T) attempt_timeout=$OPTARG ;;
         j) jitter=1 ;;
         r) retry_codes=$OPTARG ;;
         h) usage; exit 0 ;;
@@ -54,12 +59,13 @@ for n in "$tries" "$delay" "$maxdelay"; do
     [[ $n =~ ^[0-9]+$ ]] || tb_usage_error "TRIES, DELAY and MAXDELAY must be whole numbers"
 done
 
+[[ -z $attempt_timeout || $attempt_timeout =~ ^[1-9][0-9]*$ ]] || tb_usage_error "-T needs a positive number of seconds"
 [[ -z $retry_codes || $retry_codes =~ ^[0-9]+(,[0-9]+)*$ ]] || tb_usage_error "-r needs a comma separated list of exit codes"
 
 attempt=1
 started=$(tb_now)
 while true; do
-    if "$@"; then
+    if ${attempt_timeout:+tb_run_timeout "$attempt_timeout"} "$@"; then
         if (( attempt > 1 )); then
             tb_log "succeeded on attempt $attempt after $(( $(tb_now) - started ))s"
         fi

@@ -76,4 +76,16 @@ test_jitter_stays_within_bounds() {
     fi
 }
 
+test_attempt_timeout() {
+    SECONDS=0
+    assert_status 124 "a hung command is killed and reported as 124" "$ROOT/bin/retry.sh" -T 1 -t 2 sleep 20
+    if [ "$SECONDS" -lt 8 ]; then
+        assert_eq 1 1 "two one-second attempts do not take long"
+    else
+        assert_eq "under 8s" "${SECONDS}s" "two one-second attempts do not take long"
+    fi
+    assert_status 0 "fast commands are unaffected" "$ROOT/bin/retry.sh" -T 5 true
+    assert_status 2 "bad -T" "$ROOT/bin/retry.sh" -T 0 true
+}
+
 run_tests
