@@ -72,6 +72,25 @@ test_exclude_pattern() {
     assert_eq "proj/keep.txt" "$(tar -tzf "$archive" | grep -v '/$')" "only keep.txt archived"
 }
 
+test_exclude_from_file() {
+    mkdir -p "$WORK/xf/proj"
+    echo keep > "$WORK/xf/proj/keep.txt"
+    echo a > "$WORK/xf/proj/a.log"
+    echo b > "$WORK/xf/proj/b.tmp"
+    printf '*.log\n*.tmp\n' > "$WORK/xf/excludes"
+    out=$("$ROOT/bin/backup.sh" -X "$WORK/xf/excludes" "$WORK/xf/proj" "$WORK/xfdest")
+    assert_eq "proj/keep.txt" "$(tar -tzf "${out#wrote }" | grep -v '/$')" "patterns from the file are applied"
+    assert_status 1 "unreadable exclude file" "$ROOT/bin/backup.sh" -X "$WORK/nope" "$WORK/xf/proj" "$WORK/xfdest"
+}
+
+test_tar_failure_is_fatal() {
+    mkdir -p "$WORK/tf/proj" "$WORK/tfbin"
+    printf '#!/bin/sh\nexit 2\n' > "$WORK/tfbin/tar"
+    chmod +x "$WORK/tfbin/tar"
+    PATH="$WORK/tfbin:$PATH" assert_status 1 "failing tar fails the backup" "$ROOT/bin/backup.sh" "$WORK/tf/proj" "$WORK/tfdest"
+    assert_eq "0" "$(ls -A "$WORK/tfdest" | wc -l | tr -d ' ')" "no partial archive left"
+}
+
 test_dry_run_writes_nothing() {
     mkdir -p "$WORK/dr/proj"
     out=$("$ROOT/bin/backup.sh" -n "$WORK/dr/proj" "$WORK/drdest")
