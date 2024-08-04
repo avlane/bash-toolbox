@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: db-backup-sqlserver.sh [-S SERVER] [-U USER] [-C] [-k KEEP] [-V] [-n] DEST_DIR DATABASE...
+usage: db-backup-sqlserver.sh [-S SERVER] [-U USER] [-C] [-s STRIPES] [-o] [-k KEEP] [-V] [-n] DEST_DIR DATABASE...
 
 Run BACKUP DATABASE ... WITH COMPRESSION, CHECKSUM for each DATABASE through
 sqlcmd, writing DEST_DIR/DATABASE-YYYYmmdd-HHMMSS.bak.
@@ -22,6 +22,10 @@ options:
   -C          trust the server certificate. sqlcmd from mssql-tools18 (ODBC
               Driver 18) encrypts by default and rejects a self-signed
               certificate unless you pass this; only use it on networks you trust
+  -s STRIPES  write the backup as STRIPES files (DATABASE-STAMP.1of3.bak, ...)
+              which SQL Server writes in parallel; restore needs all of them
+  -o          COPY_ONLY: do not reset the differential base or disturb the log
+              chain, for one-off copies
   -k KEEP     afterwards keep only the newest KEEP backups per database. This
               only works when DEST_DIR is also visible from this machine
               (default 0 = keep everything)
@@ -37,15 +41,19 @@ USAGE
 tb_handle_help usage "$@"
 
 server= user=
+stripes=1
+copy_only=0
 trust=0
 verify=0
 keep=0
 dry=0
-while getopts ':S:U:Ck:Vnh' opt; do
+while getopts ':S:U:Cs:ok:Vnh' opt; do
     case $opt in
         S) server=$OPTARG ;;
         U) user=$OPTARG ;;
         C) trust=1 ;;
+        s) stripes=$OPTARG ;;
+        o) copy_only=1 ;;
         k) keep=$OPTARG ;;
         V) verify=1 ;;
         n) dry=1 ;;
@@ -57,6 +65,7 @@ done
 shift $((OPTIND - 1))
 
 [[ $keep =~ ^[0-9]+$ ]] || tb_usage_error "-k needs a number"
+[[ $stripes =~ ^[1-9][0-9]*$ && $stripes -le 64 ]] || tb_usage_error "-s needs a number from 1 to 64"
 [[ $# -ge 2 ]] || tb_usage_error "expected DEST_DIR and at least one DATABASE"
 dest=${1%/}
 shift
@@ -87,9 +96,23 @@ sql_string() {
 
 status=0
 for db in "$@"; do
-    file="$dest/$db-$(date +%Y%m%d-%H%M%S).bak"
-    query="BACKUP DATABASE $(sql_ident "$db") TO DISK = $(sql_string "$file") WITH COMPRESSION, CHECKSUM, INIT, NAME = $(sql_string "$db full backup");"
-    check="RESTORE VERIFYONLY FROM DISK = $(sql_string "$file") WITH CHECKSUM;"
+    stamp=$(date +%Y%m%d-%H%M%S)
+    files=()
+    if (( stripes == 1 )); then
+        files+=("$dest/$db-$stamp.bak")
+    else
+        for ((i = 1; i <= stripes; i++)); do
+            files+=("$dest/$db-$stamp.${i}of$stripes.bak")
+        done
+    fi
+    disks=
+    for f in "${files[@]}"; do
+        disks="$disks${disks:+, }DISK = $(sql_string "$f")"
+    done
+    options="COMPRESSION, CHECKSUM, INIT, NAME = $(sql_string "$db full backup")"
+    (( ! copy_only )) || options="COPY_ONLY, $options"
+    query="BACKUP DATABASE $(sql_ident "$db") TO $disks WITH $options;"
+    check="RESTORE VERIFYONLY FROM $disks WITH CHECKSUM;"
     if (( dry )); then
         echo "$query"
         (( ! verify )) || echo "$check"
@@ -97,10 +120,11 @@ for db in "$@"; do
     fi
     if sqlcmd "${conn[@]}" -Q "$query" &&
         { (( ! verify )) || sqlcmd "${conn[@]}" -Q "$check"; }; then
-        echo "wrote $file"
+        printf 'wrote %s\n' "${files[@]}"
         if (( keep > 0 )); then
             if [[ -d $dest ]]; then
-                tb_prune_newest "$keep" "$dest" "$db" .bak
+                # every backup is STRIPES files, so KEEP backups means KEEP x STRIPES files
+                tb_prune_newest $((keep * stripes)) "$dest" "$db" .bak
             else
                 tb_warn "$dest is not visible from here, not pruning old backups"
             fi

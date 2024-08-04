@@ -79,6 +79,28 @@ test_names_are_quoted() {
     esac
 }
 
+test_striped_backup_statement() {
+    out=$("$BK" -n -s 3 /srv/backup Sales)
+    stripes=$(echo "$out" | grep -o "DISK = N'[^']*'" | sed "s|.*/||; s|-[0-9]*-[0-9]*\.|-STAMP.|")
+    assert_eq "Sales-STAMP.1of3.bak'
+Sales-STAMP.2of3.bak'
+Sales-STAMP.3of3.bak'" "$stripes" "three DISK clauses"
+    assert_status 2 "too many stripes" "$BK" -s 65 /srv/backup Sales
+}
+
+test_copy_only_option() {
+    out=$("$BK" -n -o /srv/backup Sales)
+    case $out in
+        *"WITH COPY_ONLY, COMPRESSION, CHECKSUM, INIT"*) assert_eq 1 1 "COPY_ONLY comes first in WITH" ;;
+        *) assert_eq "WITH COPY_ONLY, COMPRESSION..." "$out" "COPY_ONLY comes first in WITH" ;;
+    esac
+}
+
+test_verify_lists_every_stripe() {
+    out=$("$BK" -n -V -s 2 /srv/backup Sales)
+    assert_eq "2" "$(echo "$out" | grep '^RESTORE VERIFYONLY' | grep -o 'DISK = ' | wc -l | tr -d ' ')" "verify reads both stripes"
+}
+
 test_retention_on_visible_directory() {
     mkdir -p "$WORK/bak"
     for d in 201901010000 201902010000 201903010000; do
