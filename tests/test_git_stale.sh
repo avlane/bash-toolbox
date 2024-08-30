@@ -50,6 +50,26 @@ test_author_summary() {
     esac
 }
 
+test_ignore_patterns() {
+    out=$("$ROOT/bin/git-stale-branches.sh" -d 30 -i 'old-un*' "$repo")
+    assert_eq "2020-01-01  ann  old-merged" "$out" "glob hides old-unmerged"
+    out=$("$ROOT/bin/git-stale-branches.sh" -d 30 -i old-merged -i old-unmerged "$repo")
+    assert_eq "" "$out" "two patterns hide both"
+}
+
+test_csv_output_with_quoting() {
+    crepo="$WORK/csvrepo"
+    git init -q -b main "$crepo"
+    GIT_AUTHOR_DATE="2020-03-03T12:00:00" GIT_COMMITTER_DATE="2020-03-03T12:00:00" \
+        git -C "$crepo" -c user.name='Lane, "AL" Avery' -c user.email=a@example.com commit -q --allow-empty -m x
+    git -C "$crepo" branch 'feat,one'
+    git -C "$crepo" checkout -q -b current
+    out=$("$ROOT/bin/git-stale-branches.sh" -d 30 -C "$crepo")
+    assert_eq 'date,author,branch
+2020-03-03,"Lane, ""AL"" Avery","feat,one"
+2020-03-03,"Lane, ""AL"" Avery",main' "$out" "fields with commas and quotes are quoted"
+}
+
 test_not_a_repo() {
     assert_status 1 "plain directory" "$ROOT/bin/git-stale-branches.sh" "$WORK"
 }
