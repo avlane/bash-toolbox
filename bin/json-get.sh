@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: json-get.sh [-r] KEY [FILE]
+usage: json-get.sh [-r] [-d DEFAULT] KEY [FILE]
 
 Print the value at KEY (a jq path such as .name or .server.port) from FILE, or
 from standard input when FILE is omitted or "-".
@@ -21,6 +21,8 @@ Install jq if you need more.
 
 options:
   -r          raw output: no quotes around strings
+  -d DEFAULT  print DEFAULT and exit 0 when KEY is missing or null
+              (false is a real value and is still reported with status 1)
   -h, --help  show this help
 
 Exit status (like jq -e): 0 found, 1 missing key, null or false, 2 usage error.
@@ -30,9 +32,12 @@ USAGE
 tb_handle_help usage "$@"
 
 raw=0
-while getopts ':rh' opt; do
+default=
+have_default=0
+while getopts ':rd:h' opt; do
     case $opt in
         r) raw=1 ;;
+        d) default=$OPTARG; have_default=1 ;;
         h) usage; exit 0 ;;
         *) tb_usage_error "unknown option -$OPTARG" ;;
     esac
@@ -97,21 +102,38 @@ json_fallback() {
     printf '%s\n' "$value"
 }
 
-if [[ -z ${TB_NO_JQ:-} ]] && command -v jq >/dev/null 2>&1; then
-    args=(-e)
-    if (( raw )); then
-        args+=(-r)
-    fi
-    if [[ $file == - ]]; then
-        jq "${args[@]}" "$key"
+# run_lookup - print the value, return jq -e style status
+run_lookup() {
+    if [[ -z ${TB_NO_JQ:-} ]] && command -v jq >/dev/null 2>&1; then
+        local args=(-e)
+        if (( raw )); then
+            args+=(-r)
+        fi
+        if [[ $file == - ]]; then
+            jq "${args[@]}" "$key"
+        else
+            jq "${args[@]}" "$key" "$file"
+        fi
     else
-        jq "${args[@]}" "$key" "$file"
+        local json
+        if [[ $file == - ]]; then
+            json=$(cat)
+        else
+            json=$(cat "$file")
+        fi
+        json_fallback "$json" "${key#.}"
     fi
-else
-    if [[ $file == - ]]; then
-        json=$(cat)
-    else
-        json=$(cat "$file")
+}
+
+if (( have_default )); then
+    # the output of a null (or no output at all) means "not there"; false is a value
+    status=0
+    out=$(run_lookup) || status=$?
+    if [[ $status -ne 0 && ( -z $out || $out == null ) ]]; then
+        printf '%s\n' "$default"
+        exit 0
     fi
-    json_fallback "$json" "${key#.}"
+    [[ -z $out ]] || printf '%s\n' "$out"
+    exit "$status"
 fi
+run_lookup

@@ -40,6 +40,15 @@ test_array_index() {
     assert_status 1 "index past the end" "$ROOT/bin/json-get.sh" 'tags[3]' "$WORK/doc.json"
 }
 
+test_default_for_missing_and_null() {
+    echo '{"a": null, "b": false, "c": "x"}' > "$WORK/nulls.json"
+    assert_eq "fallback" "$("$ROOT/bin/json-get.sh" -d fallback missing "$WORK/nulls.json")" "missing key"
+    assert_eq "fallback" "$("$ROOT/bin/json-get.sh" -d fallback a "$WORK/nulls.json")" "null value"
+    assert_eq "x" "$("$ROOT/bin/json-get.sh" -r -d fallback c "$WORK/nulls.json")" "present value wins"
+    assert_status 1 "false is not replaced" "$ROOT/bin/json-get.sh" -d fallback b "$WORK/nulls.json"
+    assert_eq "false" "$("$ROOT/bin/json-get.sh" -d fallback b "$WORK/nulls.json" || true)" "false is printed"
+}
+
 test_usage() {
     assert_status 2 "no key" "$ROOT/bin/json-get.sh"
 }
