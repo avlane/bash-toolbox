@@ -87,6 +87,22 @@ tb_now() {
     fi
 }
 
+# tb_now_ms - milliseconds since the epoch. bash 5 has EPOCHREALTIME
+# ("seconds.microseconds", and the separator follows the locale, so both . and ,
+# are accepted). Older shells only have whole seconds, so there the result is
+# NNN000 and short durations measure as 0.
+tb_now_ms() {
+    local t
+    if [[ -n ${TB_NOW_MS:-} ]]; then
+        printf '%s\n' "$TB_NOW_MS"
+    elif [[ -n ${EPOCHREALTIME:-} ]]; then
+        t=${EPOCHREALTIME/[.,]/}
+        printf '%s\n' "${t%???}"
+    else
+        printf '%s000\n' "$(tb_now)"
+    fi
+}
+
 # tb_readlines ARRAY_NAME - read standard input into the named array, one line
 # per element. bash 4+ has mapfile; the macOS shell (3.2) does not, so there it
 # is a read loop. Usage: tb_readlines files < <(find . -name '*.log')

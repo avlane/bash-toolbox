@@ -117,4 +117,28 @@ test_run_timeout() {
     fi
 }
 
+test_now_ms() {
+    assert_eq "1700000000123" "$(TB_NOW_MS=1700000000123 tb_now_ms)" "TB_NOW_MS pins the clock"
+    # without EPOCHREALTIME the value is whole seconds times 1000
+    unset EPOCHREALTIME
+    case $(tb_now_ms) in
+        *000) assert_eq 1 1 "whole seconds fallback ends in 000" ;;
+        *) assert_eq "NNN000" "$(tb_now_ms)" "whole seconds fallback ends in 000" ;;
+    esac
+}
+
+test_now_ms_from_epochrealtime() {
+    # on bash 5 EPOCHREALTIME is read-only magic; only the shells where it is an
+    # ordinary variable (3.2) can check the parsing, elsewhere this is skipped
+    if [ -n "${EPOCHREALTIME:-}" ]; then
+        skip "EPOCHREALTIME is managed by this shell"
+        return 0
+    fi
+    EPOCHREALTIME=1700000000.123456
+    assert_eq "1700000000123" "$(tb_now_ms)" "dot separator"
+    EPOCHREALTIME=1700000000,654321
+    assert_eq "1700000000654" "$(tb_now_ms)" "comma separator (some locales)"
+    unset EPOCHREALTIME
+}
+
 run_tests

@@ -63,11 +63,11 @@ done
 [[ -z $retry_codes || $retry_codes =~ ^[0-9]+(,[0-9]+)*$ ]] || tb_usage_error "-r needs a comma separated list of exit codes"
 
 attempt=1
-started=$(tb_now)
+started=$(tb_now_ms)
 while true; do
     if ${attempt_timeout:+tb_run_timeout "$attempt_timeout"} "$@"; then
         if (( attempt > 1 )); then
-            tb_log "succeeded on attempt $attempt after $(( $(tb_now) - started ))s"
+            tb_log "succeeded on attempt $attempt after $(( $(tb_now_ms) - started )) ms"
         fi
         exit 0
     else
