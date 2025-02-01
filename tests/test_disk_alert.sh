@@ -108,6 +108,16 @@ test_webhook_is_retried_and_failure_keeps_exit_status() {
     unset STUB_FAILS
 }
 
+test_json_output() {
+    out=$("$ROOT/bin/disk-alert.sh" -j 90 || true)
+    case $out in
+        '{"host":"'*'","alerts":["WARNING: /data is at 95% (/dev/disk2)"]}') assert_eq 1 1 "one JSON document" ;;
+        *) assert_eq '{"host":...,"alerts":[...]}' "$out" "one JSON document" ;;
+    esac
+    assert_eq "" "$("$ROOT/bin/disk-alert.sh" -j 99)" "silent when all is well"
+    assert_status 1 "exit status unchanged" "$ROOT/bin/disk-alert.sh" -j 90
+}
+
 test_bad_threshold() {
     assert_status 2 "non numeric threshold" "$ROOT/bin/disk-alert.sh" lots
 }

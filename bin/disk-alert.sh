@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: disk-alert.sh [-i INODE_PERCENT] [-c FILE] [-w URL] [PERCENT]
+usage: disk-alert.sh [-i INODE_PERCENT] [-c FILE] [-w URL] [-j] [PERCENT]
 
 Print a line for every filesystem whose space usage is at or over PERCENT
 (default 90). With -i, also report filesystems whose inode usage is at or over
@@ -22,6 +22,9 @@ as JSON ({"host": ..., "alerts": [...]}), for example to a chat webhook or a
 monitoring endpoint. The POST is retried up to 3 times with retry.sh; if it
 still fails a warning is printed and the exit status is unchanged.
 
+With -j the findings are printed as the same JSON document instead of text
+lines ({"host": ..., "alerts": [...]}); nothing is printed when all is well.
+
 Exit status: 0 nothing over a threshold, 1 something is, 2 usage error.
 
 Set DF_CMD and DFI_CMD to replace the df commands (used by the tests).
@@ -31,11 +34,13 @@ USAGE
 tb_handle_help usage "$@"
 
 inode_limit= conf= webhook=
-while getopts ':i:c:w:h' opt; do
+json=0
+while getopts ':i:c:w:jh' opt; do
     case $opt in
         i) inode_limit=$OPTARG ;;
         c) conf=$OPTARG ;;
         w) webhook=$OPTARG ;;
+        j) json=1 ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
         *) tb_usage_error "unknown option -$OPTARG" ;;
@@ -110,7 +115,7 @@ parse_df() {
 status=0
 alerts=()
 report() {
-    echo "$1"
+    (( json )) || echo "$1"
     alerts+=("$1")
     status=1
 }
@@ -129,12 +134,22 @@ if [[ -n $inode_limit ]]; then
     done < <(${DFI_CMD:-df -P -i} | parse_df last)
 fi
 
-if [[ -n $webhook && $status -ne 0 ]]; then
-    items=
+# build_payload - the JSON document for the current alerts
+build_payload() {
+    local items= a
     for a in "${alerts[@]}"; do
         items="$items${items:+,}\"$(tb_json_escape "$a")\""
     done
-    payload="{\"host\":\"$(tb_json_escape "$(hostname -s 2>/dev/null || hostname)")\",\"alerts\":[$items]}"
+    printf '{"host":"%s","alerts":[%s]}' "$(tb_json_escape "$(hostname -s 2>/dev/null || hostname)")" "$items"
+}
+
+if (( json && status != 0 )); then
+    build_payload
+    echo
+fi
+
+if [[ -n $webhook && $status -ne 0 ]]; then
+    payload=$(build_payload)
     if ! "$(dirname "${BASH_SOURCE[0]}")/retry.sh" -t 3 -d 2 "${CURL_BIN:-curl}" -s -f --max-time 10 \
             -X POST -H 'Content-Type: application/json' -d "$payload" "$webhook" >/dev/null; then
         tb_warn "could not deliver the alert to $webhook"

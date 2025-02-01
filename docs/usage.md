@@ -136,7 +136,7 @@ The SQL login's password is read from the SQLCMDPASSWORD environment variable
 ## disk-alert.sh
 
 ```
-usage: disk-alert.sh [-i INODE_PERCENT] [-c FILE] [-w URL] [PERCENT]
+usage: disk-alert.sh [-i INODE_PERCENT] [-c FILE] [-w URL] [-j] [PERCENT]
 
 Print a line for every filesystem whose space usage is at or over PERCENT
 (default 90). With -i, also report filesystems whose inode usage is at or over
@@ -150,6 +150,9 @@ With -w, when anything is over a threshold the findings are also POSTed to URL
 as JSON ({"host": ..., "alerts": [...]}), for example to a chat webhook or a
 monitoring endpoint. The POST is retried up to 3 times with retry.sh; if it
 still fails a warning is printed and the exit status is unchanged.
+
+With -j the findings are printed as the same JSON document instead of text
+lines ({"host": ..., "alerts": [...]}); nothing is printed when all is well.
 
 Exit status: 0 nothing over a threshold, 1 something is, 2 usage error.
 
