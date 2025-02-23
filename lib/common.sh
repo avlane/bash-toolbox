@@ -48,7 +48,7 @@ tb_usage_error() {
     if declare -F usage >/dev/null; then
         usage >&2
     fi
-    exit 2
+    exit "${tb_usage_status:-2}"
 }
 
 # tb_handle_help USAGE_FUNCTION ARGS... - handle --help (getopts has no long options)

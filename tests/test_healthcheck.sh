@@ -121,6 +121,26 @@ test_tls_line_in_targets_file() {
     PATH="$WORK/bin:$PATH" assert_status 0 "valid certificate in file mode" "$ROOT/bin/healthcheck.sh" -f "$WORK/tlsfile"
 }
 
+test_nagios_plugin_mode() {
+    export STUB_CODE=200
+    out=$(TB_NOW_MS=1700000000000 "$ROOT/bin/healthcheck.sh" -N -u http://app.test/)
+    assert_eq "OK - http://app.test/: status 200 | time=0.000s" "$out" "OK line with perfdata"
+    export STUB_CODE=500
+    out=$("$ROOT/bin/healthcheck.sh" -N -u http://app.test/ || true)
+    case $out in
+        "CRITICAL - http://app.test/: status 500 | time="*s) assert_eq 1 1 "CRITICAL line" ;;
+        *) assert_eq "CRITICAL - ..." "$out" "CRITICAL line" ;;
+    esac
+    assert_status 2 "CRITICAL is exit 2" "$ROOT/bin/healthcheck.sh" -N -u http://app.test/
+    unset STUB_CODE
+}
+
+test_nagios_usage_error_is_unknown() {
+    assert_status 3 "bad usage is UNKNOWN (3)" "$ROOT/bin/healthcheck.sh" -N
+    printf 'tcp a 1\n' > "$WORK/one"
+    assert_status 3 "-N with -f" "$ROOT/bin/healthcheck.sh" -N -f "$WORK/one"
+}
+
 test_usage_errors() {
     assert_status 2 "no arguments" "$ROOT/bin/healthcheck.sh"
     assert_status 2 "url and host together" "$ROOT/bin/healthcheck.sh" -u http://x/ host 80

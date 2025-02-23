@@ -8,6 +8,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 usage: healthcheck.sh [-t SECONDS] [-j] HOST PORT
+       healthcheck.sh -N [options] HOST PORT | -u URL
        healthcheck.sh [-t SECONDS] [-j] -s [-x DAYS] HOST PORT
        healthcheck.sh [-t SECONDS] [-j] [-e STATUS] [-m TEXT] -u URL
        healthcheck.sh [-t SECONDS] [-j] -f FILE
@@ -35,16 +36,26 @@ options:
   -s          check the TLS certificate's expiry instead of just connecting
   -x DAYS     with -s, required remaining validity in days (default 14)
   -f FILE     check all targets in FILE
+  -N          monitoring plugin output and exit codes, see below
   -j          print one JSON object per target instead of text
   -t SECONDS  timeout per check (default 5)
   -h, --help  show this help
 
 Exit status: 0 everything healthy, 1 at least one check failed, 2 usage error.
+
+With -N the script behaves as a monitoring plugin (Nagios, Icinga, Sensu and
+friends): one line "OK - ... | time=0.012s" or "CRITICAL - ... | time=...", exit
+status 0 for OK, 2 for CRITICAL and 3 for UNKNOWN (usage errors). It checks a
+single target, so it cannot be combined with -f. On bash 3.2 (macOS) the time
+has a resolution of one second.
 Set CURL_BIN to use a different curl.
 USAGE
 }
 
 tb_handle_help usage "$@"
+
+# in plugin mode a usage error is UNKNOWN (3), so look for -N before parsing
+case " $* " in *" -N "*) tb_usage_status=3 ;; esac
 
 url=
 expect=
@@ -54,13 +65,15 @@ json=0
 timeout=5
 tls=0
 tls_days=14
-while getopts ':u:e:m:f:t:x:sjh' opt; do
+nagios=0
+while getopts ':u:e:m:f:t:x:sjNh' opt; do
     case $opt in
         u) url=$OPTARG ;;
         e) expect=$OPTARG ;;
         m) match=$OPTARG ;;
         f) file=$OPTARG ;;
         j) json=1 ;;
+        N) nagios=1 ;;
         s) tls=1 ;;
         x) tls_days=$OPTARG ;;
         t) timeout=$OPTARG ;;
@@ -73,6 +86,10 @@ shift $((OPTIND - 1))
 
 [[ $timeout =~ ^[0-9]+$ ]] || tb_usage_error "-t needs a whole number of seconds"
 [[ $tls_days =~ ^[0-9]+$ ]] || tb_usage_error "-x needs a whole number of days"
+if (( nagios )); then
+    [[ -z $file ]] || tb_usage_error "-N checks a single target, it cannot be combined with -f"
+    (( ! json )) || tb_usage_error "-N and -j cannot be combined"
+fi
 
 # Each check sets $detail (a short human readable result) and returns 0 or 1.
 detail=
@@ -141,21 +158,28 @@ failures=0
 
 # report LABEL STATUS - print the result of one check and count failures
 report() {
-    local label=$1 rc=$2 word=OK ok=true
+    local label=$1 rc=$2 word=OK ok=true ms
     if (( rc != 0 )); then
         word=FAIL
         ok=false
         failures=$((failures + 1))
     fi
-    if (( json )); then
+    if (( nagios )); then
+        ms=$(( $(tb_now_ms) - check_started ))
+        (( ms >= 0 )) || ms=0
+        if (( rc != 0 )); then word=CRITICAL; fi
+        printf '%s - %s: %s | time=%d.%03ds\n' "$word" "$label" "$detail" $((ms / 1000)) $((ms % 1000))
+    elif (( json )); then
         printf '{"target":"%s","ok":%s,"detail":"%s"}\n' "$(tb_json_escape "$label")" "$ok" "$(tb_json_escape "$detail")"
     else
         printf '%s %s (%s)\n' "$word" "$label" "$detail"
     fi
 }
 
+check_started=0
 run_one() {   # run_one KIND ARGS...
     local rc=0 kind=$1
+    check_started=$(tb_now_ms)
     shift
     case $kind in
         tcp) check_tcp "$1" "$2" || rc=$?; report "$1:$2" "$rc" ;;
@@ -193,4 +217,7 @@ else
     fi
 fi
 
+if (( nagios && failures > 0 )); then
+    exit 2
+fi
 (( failures == 0 ))
