@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: rotate-logs.sh [-k KEEP] [-s SIZE] [-a DAYS] [-z gzip|xz] [-n] FILE...
+usage: rotate-logs.sh [-k KEEP] [-s SIZE] [-a DAYS] [-z gzip|xz] [-P COMMAND] [-n] FILE...
 
 Rotate each FILE: FILE.1 becomes FILE.2, and so on, FILE is copied to FILE.1
 and then emptied in place so a process that holds it open keeps writing to the
@@ -19,6 +19,9 @@ options:
   -s SIZE     only rotate files of at least SIZE bytes (suffixes K, M, G allowed)
   -a DAYS     only rotate if the newest rotated copy is at least DAYS days old
               (or there is none); with -s too, both conditions must hold
+  -P COMMAND  run COMMAND (with bash -c) after each file is rotated, with the
+              file's name as $1, for example -P 'systemctl reload nginx' or
+              -P 'kill -USR1 $(cat /run/app.pid)'. A failing hook is a warning
   -z TOOL     compress rotated copies with gzip or xz (FILE.1.gz, FILE.1.xz)
   -n          dry run
   -h, --help  show this help
@@ -32,12 +35,14 @@ dry=0
 min_size=0
 min_age=
 compress=
-while getopts ':k:s:a:z:nh' opt; do
+hook=
+while getopts ':k:s:a:z:P:nh' opt; do
     case $opt in
         k) keep=$OPTARG ;;
         s) min_size=$OPTARG ;;
         a) min_age=$OPTARG ;;
         z) compress=$OPTARG ;;
+        P) hook=$OPTARG ;;
         n) dry=1 ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
@@ -106,6 +111,9 @@ rotate_one() {
         "$compress" -f -- "$f.1"
     fi
     echo "rotated $f"
+    if [[ -n $hook ]]; then
+        bash -c "$hook" rotate-logs-hook "$f" || tb_warn "post-rotate command failed for $f"
+    fi
 }
 
 for file in "$@"; do

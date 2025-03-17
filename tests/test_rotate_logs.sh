@@ -73,6 +73,24 @@ test_compression_and_shifting() {
     assert_eq "no" "$([ -e "$f.4.gz" ] && echo yes || echo no)" "never more than KEEP copies"
 }
 
+test_post_rotate_hook() {
+    f="$WORK/hook.log"
+    echo line > "$f"
+    "$ROOT/bin/rotate-logs.sh" -P 'echo "$1" >> '"$WORK"'/hook-calls' "$f" >/dev/null
+    assert_eq "$f" "$(cat "$WORK/hook-calls")" "hook ran once with the file name"
+    echo line > "$WORK/skip.log"
+    : > "$WORK/empty2.log"
+    "$ROOT/bin/rotate-logs.sh" -P 'echo "$1" >> '"$WORK"'/hook-calls' "$WORK/empty2.log" >/dev/null 2>&1
+    assert_eq "1" "$(wc -l < "$WORK/hook-calls" | tr -d ' ')" "no hook for a file that was not rotated"
+}
+
+test_failing_hook_is_only_a_warning() {
+    f="$WORK/hookfail.log"
+    echo line > "$f"
+    assert_status 0 "hook failure does not fail the run" "$ROOT/bin/rotate-logs.sh" -P false "$f"
+    assert_eq "" "$(cat "$f")" "rotation itself happened"
+}
+
 test_bad_options() {
     assert_status 2 "bad -s" "$ROOT/bin/rotate-logs.sh" -s huge "$WORK/x"
     assert_status 2 "bad -z" "$ROOT/bin/rotate-logs.sh" -z zip "$WORK/x"

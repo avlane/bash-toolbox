@@ -375,7 +375,7 @@ options:
 ## rotate-logs.sh
 
 ```
-usage: rotate-logs.sh [-k KEEP] [-s SIZE] [-a DAYS] [-z gzip|xz] [-n] FILE...
+usage: rotate-logs.sh [-k KEEP] [-s SIZE] [-a DAYS] [-z gzip|xz] [-P COMMAND] [-n] FILE...
 
 Rotate each FILE: FILE.1 becomes FILE.2, and so on, FILE is copied to FILE.1
 and then emptied in place so a process that holds it open keeps writing to the
@@ -387,6 +387,9 @@ options:
   -s SIZE     only rotate files of at least SIZE bytes (suffixes K, M, G allowed)
   -a DAYS     only rotate if the newest rotated copy is at least DAYS days old
               (or there is none); with -s too, both conditions must hold
+  -P COMMAND  run COMMAND (with bash -c) after each file is rotated, with the
+              file's name as $1, for example -P 'systemctl reload nginx' or
+              -P 'kill -USR1 $(cat /run/app.pid)'. A failing hook is a warning
   -z TOOL     compress rotated copies with gzip or xz (FILE.1.gz, FILE.1.xz)
   -n          dry run
   -h, --help  show this help
