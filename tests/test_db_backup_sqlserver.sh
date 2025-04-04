@@ -90,10 +90,7 @@ Sales-STAMP.3of3.bak'" "$stripes" "three DISK clauses"
 
 test_copy_only_option() {
     out=$("$BK" -n -o /srv/backup Sales)
-    case $out in
-        *"WITH COPY_ONLY, COMPRESSION, CHECKSUM, INIT"*) assert_eq 1 1 "COPY_ONLY comes first in WITH" ;;
-        *) assert_eq "WITH COPY_ONLY, COMPRESSION..." "$out" "COPY_ONLY comes first in WITH" ;;
-    esac
+    assert_contains "$out" "WITH COPY_ONLY, COMPRESSION, CHECKSUM, INIT" "COPY_ONLY comes first in WITH"
 }
 
 test_verify_lists_every_stripe() {

@@ -19,10 +19,7 @@ test_flags_missing_passphrase() {
     mkdir -p "$d" && chmod 700 "$d"
     ssh-keygen -q -t ed25519 -N '' -f "$d/id_ed25519"
     out=$("$ROOT/bin/ssh-audit.sh" -d "$d" || true)
-    case $out in
-        *"no passphrase"*) assert_eq 1 1 "reports missing passphrase" ;;
-        *) assert_eq "a finding" "$out" "reports missing passphrase" ;;
-    esac
+    assert_contains "$out" "no passphrase" "reports missing passphrase"
 }
 
 test_flags_loose_permissions() {
@@ -45,10 +42,7 @@ test_flags_duplicate_authorized_keys() {
         'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOnlyATestKeyOne user@b' \
         'from="10.0.0.0/8" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOtherKey other@c' > "$d/authorized_keys"
     out=$("$ROOT/bin/ssh-audit.sh" -d "$d" || true)
-    case $out in
-        *"duplicate keys (1 distinct)"*) assert_eq 1 1 "finds the duplicate" ;;
-        *) assert_eq "duplicate keys (1 distinct)" "$out" "finds the duplicate" ;;
-    esac
+    assert_contains "$out" "duplicate keys (1 distinct)" "finds the duplicate"
 }
 
 test_flags_unhashed_known_hosts() {

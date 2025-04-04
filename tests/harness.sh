@@ -47,12 +47,37 @@ assert_status() {
     assert_eq "$expected" "$actual" "$message"
 }
 
+assert_contains() {
+    # assert_contains HAYSTACK NEEDLE MESSAGE - plain substring, not a pattern
+    case $1 in
+        *"$2"*) PASS=$((PASS + 1)) ;;
+        *) _fail "$3" "expected to find: $2" "in: $1" ;;
+    esac
+}
+
+assert_not_contains() {
+    # assert_not_contains HAYSTACK NEEDLE MESSAGE
+    case $1 in
+        *"$2"*) _fail "$3" "did not expect to find: $2" "in: $1" ;;
+        *) PASS=$((PASS + 1)) ;;
+    esac
+}
+
 assert_file_exists() {
     # assert_file_exists PATH MESSAGE
     if [ -e "$1" ]; then
         PASS=$((PASS + 1))
     else
         _fail "$2" "missing: $1"
+    fi
+}
+
+assert_file_missing() {
+    # assert_file_missing PATH MESSAGE
+    if [ -e "$1" ] || [ -L "$1" ]; then
+        _fail "$2" "unexpectedly present: $1"
+    else
+        PASS=$((PASS + 1))
     fi
 }
 

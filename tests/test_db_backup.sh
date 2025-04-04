@@ -86,10 +86,7 @@ test_pg_retention() {
 test_pg_verify() {
     : > "$STUB_LOG"
     assert_status 0 "verified dump succeeds" "$ROOT/bin/db-backup-postgres.sh" -V "$WORK/pg6" app
-    case $(cat "$STUB_LOG") in
-        *"pg_restore --list "*) assert_eq 1 1 "pg_restore --list was run" ;;
-        *) assert_eq "pg_restore --list" "$(cat "$STUB_LOG")" "pg_restore --list was run" ;;
-    esac
+    assert_contains "$(cat "$STUB_LOG")" "pg_restore --list " "pg_restore --list was run"
     export STUB_RESTORE_FAIL=1
     assert_status 1 "unreadable dump fails" "$ROOT/bin/db-backup-postgres.sh" -V "$WORK/pg7" app
     unset STUB_RESTORE_FAIL
@@ -103,10 +100,7 @@ test_pg_plain_and_directory_formats() {
     "$ROOT/bin/db-backup-postgres.sh" -F directory -j 4 "$WORK/pg9" app >/dev/null
     assert_eq "1" "$(ls -d "$WORK/pg9"/app-*.dumpdir | wc -l | tr -d ' ')" "directory dump has .dumpdir"
     assert_eq "1" "$(ls "$WORK/pg9"/app-*.dumpdir | grep -c toc.dat)" "directory dump contains its files"
-    case $(cat "$STUB_LOG") in
-        *"-Fd -j 4 -f "*) assert_eq 1 1 "format and jobs passed" ;;
-        *) assert_eq "-Fd -j 4 -f ..." "$(cat "$STUB_LOG")" "format and jobs passed" ;;
-    esac
+    assert_contains "$(cat "$STUB_LOG")" "-Fd -j 4 -f " "format and jobs passed"
 }
 
 test_pg_directory_retention_removes_directories() {

@@ -10,10 +10,7 @@ git -C "$WORK/repo" -c user.name=t -c user.email=t@example.com commit -q --allow
 
 test_dry_run_lists_commands() {
     out=$("$ROOT/bin/git-maint.sh" -n "$WORK/repo")
-    case $out in
-        *"gc --auto"*) assert_eq 1 1 "dry run mentions gc" ;;
-        *) assert_eq "gc --auto" "$out" "dry run mentions gc" ;;
-    esac
+    assert_contains "$out" "gc --auto" "dry run mentions gc"
 }
 
 test_runs_on_a_real_repo() {
