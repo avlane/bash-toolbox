@@ -75,6 +75,10 @@ if (( rc == 1 )) && tar --version 2>&1 | grep -q 'GNU tar'; then
 elif (( rc != 0 )); then
     tb_die "tar failed with status $rc"
 fi
+
+# read the whole archive back before trusting it: this catches a truncated or
+# corrupt gzip stream (a full disk, for example) while the source still exists
+tar -tzf "$tmp" >/dev/null 2>&1 || tb_die "the new archive cannot be read back, not keeping it"
 mv "$tmp" "$archive"
 tb_sha256 "$archive" > "$archive.sha256"
 echo "wrote $archive"

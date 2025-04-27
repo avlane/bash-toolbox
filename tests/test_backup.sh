@@ -91,6 +91,22 @@ test_tar_failure_is_fatal() {
     assert_eq "0" "$(ls -A "$WORK/tfdest" | wc -l | tr -d ' ')" "no partial archive left"
 }
 
+test_unreadable_archive_is_not_kept() {
+    mkdir -p "$WORK/rb/proj" "$WORK/rbbin"
+    # a tar that "creates" garbage and then cannot list it
+    cat > "$WORK/rbbin/tar" <<'STUB'
+#!/bin/sh
+case "$1" in
+    -czf) echo not-a-gzip > "$2" ;;
+    -tzf) exit 1 ;;
+    *) exit 0 ;;
+esac
+STUB
+    chmod +x "$WORK/rbbin/tar"
+    PATH="$WORK/rbbin:$PATH" assert_status 1 "unreadable archive fails the backup" "$ROOT/bin/backup.sh" "$WORK/rb/proj" "$WORK/rbdest"
+    assert_eq "0" "$(ls -A "$WORK/rbdest" | wc -l | tr -d ' ')" "nothing is left in the destination"
+}
+
 test_dry_run_writes_nothing() {
     mkdir -p "$WORK/dr/proj"
     out=$("$ROOT/bin/backup.sh" -n "$WORK/dr/proj" "$WORK/drdest")
