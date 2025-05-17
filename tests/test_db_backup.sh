@@ -48,6 +48,12 @@ cat > "$WORK/bin/mysql" <<'STUB'
 printf 'information_schema\nmysql\nshop\nperformance_schema\nsys\nblog\n'
 STUB
 chmod +x "$WORK/bin/mysql"
+cat > "$WORK/bin/pg_isready" <<'STUB'
+#!/bin/bash
+echo "pg_isready $*" >> "$STUB_LOG"
+[ -z "${STUB_NOT_READY:-}" ]
+STUB
+chmod +x "$WORK/bin/pg_isready"
 export PATH="$WORK/bin:$PATH"
 export STUB_LOG="$WORK/calls"
 
@@ -61,9 +67,10 @@ test_pg_writes_dump_per_database() {
 test_pg_connection_options_passed() {
     : > "$STUB_LOG"
     "$ROOT/bin/db-backup-postgres.sh" -H db01 -p 5433 -U backup "$WORK/pg2" app >/dev/null
-    case $(cat "$STUB_LOG") in
+    assert_eq "pg_isready -q -h db01 -p 5433 -U backup" "$(grep '^pg_isready' "$STUB_LOG")" "options reach pg_isready"
+    case $(grep -v '^pg_isready' "$STUB_LOG") in
         "-h db01 -p 5433 -U backup -Fc -f "*" app") assert_eq 1 1 "options reach pg_dump" ;;
-        *) assert_eq "-h db01 -p 5433 -U backup -Fc -f TMP app" "$(cat "$STUB_LOG")" "options reach pg_dump" ;;
+        *) assert_eq "-h db01 -p 5433 -U backup -Fc -f TMP app" "$(grep -v '^pg_isready' "$STUB_LOG")" "options reach pg_dump" ;;
     esac
 }
 
@@ -115,6 +122,15 @@ test_pg_option_checks() {
     assert_status 2 "bad format" "$ROOT/bin/db-backup-postgres.sh" -F zip "$WORK/x" app
     assert_status 2 "-j without directory format" "$ROOT/bin/db-backup-postgres.sh" -j 2 "$WORK/x" app
     assert_status 2 "verify plain" "$ROOT/bin/db-backup-postgres.sh" -F plain -V "$WORK/x" app
+}
+
+test_pg_preflight_stops_before_dumping() {
+    : > "$STUB_LOG"
+    export STUB_NOT_READY=1
+    assert_status 1 "server down" "$ROOT/bin/db-backup-postgres.sh" -H db01 "$WORK/pg11" app reports
+    unset STUB_NOT_READY
+    assert_eq "pg_isready -q -h db01" "$(cat "$STUB_LOG")" "only the preflight was run, with the connection options"
+    assert_file_missing "$WORK/pg11" "nothing created"
 }
 
 test_pg_dry_run() {

@@ -78,6 +78,11 @@ if (( verify )); then
     tb_require_cmd pg_restore
 fi
 
+# fail fast, once, if the server is not there, instead of one failure per database
+if (( ! dry )) && command -v pg_isready >/dev/null 2>&1; then
+    pg_isready -q ${conn[@]+"${conn[@]}"} || tb_die "the server is not accepting connections (pg_isready)"
+fi
+
 status=0
 for db in "$@"; do
     out="$dest/$db-$(date +%Y%m%d-%H%M%S)$ext"
