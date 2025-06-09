@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: bootstrap-dotfiles.sh [-n] [-t TARGET_DIR] [-m MANIFEST] [-H HOST] DOTFILES_DIR
+usage: bootstrap-dotfiles.sh [-n] [-t TARGET_DIR] [-m MANIFEST] [-H HOST] [-u] DOTFILES_DIR
 
 Link entries of DOTFILES_DIR into TARGET_DIR (default $HOME). An entry named
 "zshrc" becomes TARGET_DIR/.zshrc. A file or directory that is already in the
@@ -24,7 +24,12 @@ output of hostname -s), it is linked instead of DOTFILES_DIR/NAME. This lets one
 repository carry a laptop and a server flavour of, say, gitconfig. The hosts
 directory itself is never linked.
 
+Undo with -u: every link that points into DOTFILES_DIR is removed, and if a
+NAME.bak from an earlier run is sitting next to it, that file is put back. Links
+that point somewhere else are left alone.
+
 options:
+  -u          uninstall (see above)
   -H HOST     use the overlay for HOST instead of this machine's name
   -n          dry run: print what would happen
   -t DIR      link into DIR instead of $HOME
@@ -39,12 +44,14 @@ dry=0
 target_dir=$HOME
 manifest=
 host=
-while getopts ':nt:m:H:h' opt; do
+uninstall=0
+while getopts ':nt:m:H:uh' opt; do
     case $opt in
         n) dry=1 ;;
         t) target_dir=$OPTARG ;;
         m) manifest=$OPTARG ;;
         H) host=$OPTARG ;;
+        u) uninstall=1 ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
         *) tb_usage_error "unknown option -$OPTARG" ;;
@@ -62,6 +69,17 @@ link_one() {
     to="$target_dir/$rel"
     if [[ -e $src/hosts/$host/$name || -L $src/hosts/$host/$name ]]; then
         from="$src/hosts/$host/$name"
+    fi
+    if (( uninstall )); then
+        if [[ -L $to && $(readlink "$to") == "$from" ]]; then
+            if (( dry )); then echo "would remove $to"; else rm "$to"; echo "removed $to"; fi
+            if [[ -e $to.bak || -L $to.bak ]]; then
+                if (( dry )); then echo "would restore $to.bak"; else mv "$to.bak" "$to"; echo "restored $to"; fi
+            fi
+        else
+            echo "leaving $to alone (not a link into the repository)"
+        fi
+        return 0
     fi
     if [[ ! -e $from && ! -L $from ]]; then
         tb_warn "$name is not in $src, skipping"

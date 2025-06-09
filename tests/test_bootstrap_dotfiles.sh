@@ -72,6 +72,25 @@ test_host_overlay_wins() {
     assert_eq "no" "$([ -e "$WORK/host/home/.tmux.conf" ] && echo yes || echo no)" "other hosts' files are ignored"
 }
 
+test_uninstall_removes_links_and_restores_backups() {
+    fresh un
+    echo "my old vimrc" > "$WORK/un/home/.vimrc"
+    "$BS" -t "$WORK/un/home" "$WORK/un/repo" >/dev/null
+    assert_eq "my old vimrc" "$(cat "$WORK/un/home/.vimrc.bak")" "install kept the old file"
+    "$BS" -u -t "$WORK/un/home" "$WORK/un/repo" >/dev/null
+    assert_eq "my old vimrc" "$(cat "$WORK/un/home/.vimrc")" "backup put back"
+    assert_file_missing "$WORK/un/home/.vimrc.bak" "backup consumed"
+    assert_file_missing "$WORK/un/home/.profile" "link without a backup just goes away"
+}
+
+test_uninstall_dry_run_and_foreign_links() {
+    fresh un2
+    ln -s /elsewhere "$WORK/un2/home/.vimrc"
+    out=$("$BS" -u -n -t "$WORK/un2/home" "$WORK/un2/repo")
+    assert_contains "$out" "leaving $WORK/un2/home/.vimrc alone" "foreign link is not touched"
+    assert_eq "/elsewhere" "$(readlink "$WORK/un2/home/.vimrc")" "still there after dry run"
+}
+
 test_usage_error() {
     assert_status 2 "no directory" "$BS"
 }

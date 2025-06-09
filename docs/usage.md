@@ -24,7 +24,7 @@ options:
 ## bootstrap-dotfiles.sh
 
 ```
-usage: bootstrap-dotfiles.sh [-n] [-t TARGET_DIR] [-m MANIFEST] [-H HOST] DOTFILES_DIR
+usage: bootstrap-dotfiles.sh [-n] [-t TARGET_DIR] [-m MANIFEST] [-H HOST] [-u] DOTFILES_DIR
 
 Link entries of DOTFILES_DIR into TARGET_DIR (default $HOME). An entry named
 "zshrc" becomes TARGET_DIR/.zshrc. A file or directory that is already in the
@@ -41,7 +41,12 @@ output of hostname -s), it is linked instead of DOTFILES_DIR/NAME. This lets one
 repository carry a laptop and a server flavour of, say, gitconfig. The hosts
 directory itself is never linked.
 
+Undo with -u: every link that points into DOTFILES_DIR is removed, and if a
+NAME.bak from an earlier run is sitting next to it, that file is put back. Links
+that point somewhere else are left alone.
+
 options:
+  -u          uninstall (see above)
   -H HOST     use the overlay for HOST instead of this machine's name
   -n          dry run: print what would happen
   -t DIR      link into DIR instead of $HOME
