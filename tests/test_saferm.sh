@@ -76,4 +76,36 @@ test_refused_path_does_not_stop_the_rest() {
     assert_eq "no" "$([ -e "$WORK/home2/keep-me.txt" ] && echo yes || echo no)" "the valid file was still trashed"
 }
 
+test_list_shows_age_and_original_name() {
+    rm -rf "$SAFERM_TRASH"; mkdir -p "$SAFERM_TRASH"
+    now=$(date +%s)
+    echo a > "$SAFERM_TRASH/report.txt.$((now - 3 * 86400))"
+    echo b > "$SAFERM_TRASH/my notes.md.$((now - 10 * 86400)).2"
+    out=$("$ROOT/bin/saferm.sh" -l)
+    assert_contains "$out" "    3 days  report.txt  ($SAFERM_TRASH/report.txt." "age and original name"
+    assert_contains "$out" "   10 days  my notes.md  (" "names with spaces and a .N suffix"
+}
+
+test_restore_newest_entry() {
+    rm -rf "$SAFERM_TRASH"; mkdir -p "$SAFERM_TRASH" "$WORK/restore"
+    now=$(date +%s)
+    echo old > "$SAFERM_TRASH/doc.txt.$((now - 100))"
+    echo new > "$SAFERM_TRASH/doc.txt.$((now - 10))"
+    echo same-second-later > "$SAFERM_TRASH/doc.txt.$((now - 10)).1"
+    echo other > "$SAFERM_TRASH/doc.txt.bak.$((now - 5))"
+    (cd "$WORK/restore" && "$ROOT/bin/saferm.sh" -R doc.txt >/dev/null)
+    assert_eq "same-second-later" "$(cat "$WORK/restore/doc.txt")" "newest entry, later suffix wins, doc.txt.bak is not doc.txt"
+    assert_eq "3" "$(ls "$SAFERM_TRASH" | wc -l | tr -d ' ')" "one entry left the trash"
+}
+
+test_restore_refuses_to_overwrite_or_guess() {
+    rm -rf "$SAFERM_TRASH"; mkdir -p "$SAFERM_TRASH" "$WORK/restore2"
+    echo x > "$SAFERM_TRASH/a.txt.$(date +%s)"
+    echo present > "$WORK/restore2/a.txt"
+    (cd "$WORK/restore2" && assert_status 1 "existing file is not overwritten" "$ROOT/bin/saferm.sh" -R a.txt)
+    assert_eq "present" "$(cat "$WORK/restore2/a.txt")" "file untouched"
+    assert_status 1 "unknown name" "$ROOT/bin/saferm.sh" -R nothing-by-that-name
+    assert_status 2 "path instead of name" "$ROOT/bin/saferm.sh" -R ../a.txt
+}
+
 run_tests

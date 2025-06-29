@@ -405,12 +405,20 @@ options:
 ```
 usage: saferm.sh [-n] [-v] FILE...
        saferm.sh -P DAYS
+       saferm.sh -l
+       saferm.sh [-n] -R NAME
 
 Move each FILE (or directory) into the trash directory, $SAFERM_TRASH or
 ~/.saferm-trash, as NAME.EPOCHSECONDS (plus .N if that name is taken). Nothing is ever deleted by the first
 form, so a mistake can be undone with mv.
 
+  -l lists what is in the trash (age in days, original name, trash entry), and
+  -R NAME puts the newest trashed item called NAME back into the current
+  directory, refusing to overwrite anything.
+
 options:
+  -l          list the trash
+  -R NAME     restore the newest trash entry for NAME here
   -P DAYS     permanently delete trash entries older than DAYS days
   -n          dry run
   -v          say what was moved
