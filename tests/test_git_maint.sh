@@ -41,4 +41,23 @@ test_recursive_mode_needs_repositories() {
     assert_status 1 "no repositories" "$ROOT/bin/git-maint.sh" -r "$WORK/empty"
 }
 
+test_commit_graph_step() {
+    out=$("$ROOT/bin/git-maint.sh" -n -g "$WORK/repo")
+    assert_contains "$out" "commit-graph write --reachable" "step is listed with -g"
+    out=$("$ROOT/bin/git-maint.sh" -n "$WORK/repo")
+    assert_not_contains "$out" "commit-graph" "and absent without it"
+    "$ROOT/bin/git-maint.sh" -g "$WORK/repo" >/dev/null
+    assert_file_exists "$WORK/repo/.git/objects/info/commit-graph" "graph file written"
+}
+
+test_old_git_skips_commit_graph() {
+    real_git=$(command -v git)
+    mkdir -p "$WORK/oldgit"
+    printf '#!/bin/sh\nif [ "$1" = --version ]; then echo "git version 2.10.2"; else exec "%s" "$@"; fi\n' "$real_git" > "$WORK/oldgit/git"
+    chmod +x "$WORK/oldgit/git"
+    out=$(PATH="$WORK/oldgit:$PATH" "$ROOT/bin/git-maint.sh" -n -g "$WORK/repo" 2>&1)
+    assert_not_contains "$out" "commit-graph write" "step skipped"
+    assert_contains "$out" "older than 2.18" "and says why"
+}
+
 run_tests

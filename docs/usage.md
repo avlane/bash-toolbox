@@ -200,14 +200,16 @@ options:
 ## git-maint.sh
 
 ```
-usage: git-maint.sh [-n] [-a] [REPO]
-       git-maint.sh [-n] [-a] -r DIR
+usage: git-maint.sh [-n] [-a] [-g] [REPO]
+       git-maint.sh [-n] [-a] [-g] -r DIR
 
 Housekeeping for REPO (default: current directory):
   1. git remote prune <remote>   for every remote (forgets deleted branches)
   2. git worktree prune
   3. git reflog expire --expire=90.days.ago --all
   4. git gc --auto               (or, with -a, git gc --prune=2.weeks.ago)
+  5. with -g: git commit-graph write --reachable   (speeds up log and merge-base
+     queries on big repositories; skipped with a note on git older than 2.18)
 
 With -r, DIR is searched for repositories (directories containing .git, not
 looking inside them) and each one is maintained; a table of .git sizes before
@@ -215,6 +217,7 @@ and after is printed at the end.
 
 options:
   -r DIR      maintain every repository below DIR
+  -g          also write the commit-graph file
   -a          run a full gc instead of gc --auto
   -n          dry run: print the commands without running them
   -h, --help  show this help
