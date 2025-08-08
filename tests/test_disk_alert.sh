@@ -68,6 +68,11 @@ test_per_mount_override() {
     assert_status 1 "an override can also lower it" "$ROOT/bin/disk-alert.sh" -c "$WORK/limits" 99
 }
 
+test_override_file_with_windows_line_endings() {
+    printf '/data 99\r\n' > "$WORK/crlf-limits"
+    assert_status 0 "limit is read as 99, not '99<CR>'" "$ROOT/bin/disk-alert.sh" -c "$WORK/crlf-limits" 90
+}
+
 test_bad_override_file() {
     printf '/data lots\n' > "$WORK/limits"
     assert_status 1 "bad line is an error" "$ROOT/bin/disk-alert.sh" -c "$WORK/limits"

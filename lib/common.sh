@@ -262,3 +262,10 @@ tb_run_timeout() {
     fi
     return "$rc"
 }
+
+# tb_cat_unix FILE - print FILE without carriage returns. List and config files
+# edited on Windows end their lines in CR LF, and read would keep the CR as part
+# of the last field. Use as: while read ...; do ...; done < <(tb_cat_unix "$file")
+tb_cat_unix() {
+    tr -d '\r' < "$1"
+}

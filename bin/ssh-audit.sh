@@ -152,7 +152,7 @@ if [[ -n $hosts_file ]]; then
         if [[ ! -f $known ]] || ! ssh-keygen -F "$host" -f "$known" >/dev/null 2>&1; then
             finding "$host" "not found in $known"
         fi
-    done < "$hosts_file"
+    done < <(tb_cat_unix "$hosts_file")
 fi
 
 if (( json )); then

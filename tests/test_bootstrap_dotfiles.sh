@@ -91,6 +91,14 @@ test_uninstall_dry_run_and_foreign_links() {
     assert_eq "/elsewhere" "$(readlink "$WORK/un2/home/.vimrc")" "still there after dry run"
 }
 
+test_manifest_with_windows_line_endings() {
+    fresh crlf
+    printf 'vimrc\r\nprofile .config/profile\r\n' > "$WORK/crlf/manifest"
+    "$BS" -t "$WORK/crlf/home" -m "$WORK/crlf/manifest" "$WORK/crlf/repo" >/dev/null 2>&1
+    assert_eq "$WORK/crlf/repo/vimrc" "$(readlink "$WORK/crlf/home/.vimrc")" "name without a trailing CR"
+    assert_eq "$WORK/crlf/repo/profile" "$(readlink "$WORK/crlf/home/.config/profile")" "target without a trailing CR"
+}
+
 test_usage_error() {
     assert_status 2 "no directory" "$BS"
 }

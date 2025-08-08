@@ -65,6 +65,16 @@ test_hosts_file_against_known_hosts() {
     assert_eq "new.example.org: not found in $d/known_hosts" "$out" "only the unseen host is reported"
 }
 
+test_hosts_file_with_windows_line_endings() {
+    d="$WORK/hostscrlf"
+    mkdir -p "$d" && chmod 700 "$d"
+    ssh-keygen -q -t ed25519 -N '' -f "$WORK/hostkey2"
+    printf 'seen.example.org %s\n' "$(cut -d' ' -f1,2 "$WORK/hostkey2.pub")" > "$d/known_hosts"
+    ssh-keygen -q -H -f "$d/known_hosts" >/dev/null 2>&1; rm -f "$d/known_hosts.old"
+    printf 'seen.example.org\r\n' > "$WORK/hostlist2"
+    assert_status 0 "host name without a trailing CR is found" "$ROOT/bin/ssh-audit.sh" -d "$d" -H "$WORK/hostlist2"
+}
+
 test_verbose_lists_fingerprints() {
     d="$WORK/verbose"
     mkdir -p "$d" && chmod 700 "$d"

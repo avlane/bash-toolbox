@@ -111,7 +111,7 @@ if [[ -n $manifest ]]; then
             continue
         fi
         link_one "$name" "${rel:-.$name}"
-    done < "$manifest"
+    done < <(tb_cat_unix "$manifest")
 else
     for path in "$src"/*; do
         [[ -e $path || -L $path ]] || continue

@@ -70,6 +70,15 @@ FAIL http://app.test/health (status 500, expected 200)" "$out" "failures are lis
     unset STUB_CODE
 }
 
+test_targets_file_with_windows_line_endings() {
+    printf 'tcp db01 5432\r\nhttp http://app.test/health 200\r\n' > "$WORK/crlf"
+    export STUB_CODE=200
+    out=$(STUB_NC=open PATH="$WORK/bin:$PATH" "$ROOT/bin/healthcheck.sh" -f "$WORK/crlf")
+    unset STUB_CODE
+    assert_eq "OK db01:5432 (accepting connections)
+OK http://app.test/health (status 200)" "$out" "CRLF does not end up in the port or the status"
+}
+
 test_json_output() {
     export STUB_CODE=503
     out=$("$ROOT/bin/healthcheck.sh" -j -u 'http://app.test/say "hi"' || true)

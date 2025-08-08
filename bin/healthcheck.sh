@@ -204,7 +204,7 @@ if [[ -n $file ]]; then
                   run_one http "$a" "$b" ;;
             *) tb_die "unknown check type in $file: $kind" ;;
         esac
-    done < "$file"
+    done < <(tb_cat_unix "$file")
 elif [[ -n $url ]]; then
     [[ $# -eq 0 ]] || tb_usage_error "do not combine -u with HOST PORT"
     run_one http "$url" "$expect" "$match"

@@ -75,7 +75,7 @@ load_overrides() {
         if (( use_assoc )); then
             overrides[$m]=$p
         fi
-    done < "$file"
+    done < <(tb_cat_unix "$file")
 }
 
 # limit_for MOUNT DEFAULT - the threshold that applies to MOUNT
