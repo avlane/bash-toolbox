@@ -69,6 +69,13 @@ test_verify_uses_systemd_analyze() {
     ANALYZE_FAIL=1 PATH="$WORK/bin:$PATH" assert_status 1 "a rejected unit fails the run" "$ROOT/bin/gen-systemd.sh" -V -n chk -c /usr/bin/true
 }
 
+test_randomized_delay() {
+    out=$("$ROOT/bin/gen-systemd.sh" -n job -c /usr/bin/true -t daily -R 900)
+    assert_contains "$out" "RandomizedDelaySec=900" "delay in the timer"
+    assert_status 2 "-R without -t" "$ROOT/bin/gen-systemd.sh" -n job -c /usr/bin/true -R 900
+    assert_status 2 "-R not a number" "$ROOT/bin/gen-systemd.sh" -n job -c /usr/bin/true -t daily -R soon
+}
+
 test_rejects_relative_command() {
     assert_status 2 "relative ExecStart" "$ROOT/bin/gen-systemd.sh" -n x -c ./run.sh
 }

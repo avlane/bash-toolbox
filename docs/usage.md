@@ -167,7 +167,7 @@ Set DF_CMD and DFI_CMD to replace the df commands (used by the tests).
 ## gen-systemd.sh
 
 ```
-usage: gen-systemd.sh -n NAME -c COMMAND [-t ONCALENDAR] [-o DIR] [-d DESCRIPTION]
+usage: gen-systemd.sh -n NAME -c COMMAND [-t ONCALENDAR] [-R SECONDS] [-o DIR] [-d DESCRIPTION]
                       [-u USER] [-w WORKDIR] [-e VAR=VALUE]... [-H] [-W PATH]... [-i] [-V]
 
 Print a NAME.service unit to standard output. COMMAND must start with an
@@ -193,6 +193,9 @@ options:
                   (same as -o with that directory) and print the systemctl commands
   -V              verify the generated files with systemd-analyze verify
                   (skipped with a warning when systemd-analyze is not installed)
+  -R SECONDS      with -t, RandomizedDelaySec=: start up to this long after the
+                  scheduled time, so a fleet of machines does not hit a shared
+                  server at the same second
   -o DIR          write NAME.service (and NAME.timer) into DIR instead of stdout
   -h, --help      show this help
 ```

@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: gen-systemd.sh -n NAME -c COMMAND [-t ONCALENDAR] [-o DIR] [-d DESCRIPTION]
+usage: gen-systemd.sh -n NAME -c COMMAND [-t ONCALENDAR] [-R SECONDS] [-o DIR] [-d DESCRIPTION]
                       [-u USER] [-w WORKDIR] [-e VAR=VALUE]... [-H] [-W PATH]... [-i] [-V]
 
 Print a NAME.service unit to standard output. COMMAND must start with an
@@ -33,6 +33,9 @@ options:
                   (same as -o with that directory) and print the systemctl commands
   -V              verify the generated files with systemd-analyze verify
                   (skipped with a warning when systemd-analyze is not installed)
+  -R SECONDS      with -t, RandomizedDelaySec=: start up to this long after the
+                  scheduled time, so a fleet of machines does not hit a shared
+                  server at the same second
   -o DIR          write NAME.service (and NAME.timer) into DIR instead of stdout
   -h, --help      show this help
 USAGE
@@ -41,12 +44,13 @@ USAGE
 tb_handle_help usage "$@"
 
 name= cmd= desc= user= workdir= calendar= outdir=
+random_delay=
 install=0
 validate=0
 harden=0
 envs=()
 writable=()
-while getopts ':n:c:d:u:w:e:t:o:HW:iVh' opt; do
+while getopts ':n:c:d:u:w:e:t:R:o:HW:iVh' opt; do
     case $opt in
         n) name=$OPTARG ;;
         c) cmd=$OPTARG ;;
@@ -55,6 +59,7 @@ while getopts ':n:c:d:u:w:e:t:o:HW:iVh' opt; do
         w) workdir=$OPTARG ;;
         e) envs+=("$OPTARG") ;;
         t) calendar=$OPTARG ;;
+        R) random_delay=$OPTARG ;;
         o) outdir=$OPTARG ;;
         H) harden=1 ;;
         i) install=1 ;;
@@ -70,6 +75,10 @@ shift $((OPTIND - 1))
 [[ -n $name && -n $cmd ]] || tb_usage_error "-n and -c are required"
 [[ $name =~ ^[A-Za-z0-9_.@-]+$ ]] || tb_usage_error "unit name has characters systemd does not allow"
 [[ $cmd == /* ]] || tb_usage_error "COMMAND must start with an absolute path"
+if [[ -n $random_delay ]]; then
+    [[ -n $calendar ]] || tb_usage_error "-R only makes sense together with -t"
+    [[ $random_delay =~ ^[0-9]+$ ]] || tb_usage_error "-R needs a number of seconds"
+fi
 if (( ! harden )) && [[ ${#writable[@]} -gt 0 ]]; then
     tb_usage_error "-W only makes sense together with -H"
 fi
@@ -117,6 +126,7 @@ emit_timer() {
     echo "[Timer]"
     echo "OnCalendar=$calendar"
     echo "Persistent=true"
+    [[ -z $random_delay ]] || echo "RandomizedDelaySec=$random_delay"
     echo
     echo "[Install]"
     echo "WantedBy=timers.target"
