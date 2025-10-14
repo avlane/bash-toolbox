@@ -80,13 +80,23 @@ shellcheck.
 ## Portability
 
 Developed on macOS, where `/bin/bash` is 3.2, and meant to also run on Linux.
-The scripts therefore avoid bash 4+ features unless they are guarded.
+The scripts therefore avoid bash 4+ features unless they are guarded by a
+version check with a fallback, and avoid GNU-only tools (`readlink -f`,
+`date -d`, `stat -c`, `find -printf`, `timeout`, `sed -i` without a suffix).
 
-Known differences that the scripts deal with:
+| feature | needs | how it is handled |
+| --- | --- | --- |
+| `mapfile` | bash 4.0 | `tb_readlines` falls back to a `read` loop |
+| associative arrays | bash 4.0 | `disk-alert.sh -c` falls back to scanning the file |
+| `${var@Q}` | bash 4.4 | `tb_quote` falls back to `printf %q` |
+| `EPOCHSECONDS` | bash 5.0 | `tb_now` falls back to `date +%s` |
+| `EPOCHREALTIME` | bash 5.0 | `tb_now_ms` falls back to whole seconds |
+| empty array under `set -u` | bash 4.4 | expanded as `${arr[@]+"${arr[@]}"}` |
+| sha256 | `sha256sum` or `shasum` | `tb_sha256` picks whichever exists |
+| `timeout` | GNU coreutils | `tb_run_timeout` is a small bash watchdog |
+| date arithmetic | GNU `date -d` / BSD `date -j` | `tb_days_from_civil` is plain integer maths |
 
-- `git-stale-branches.sh` tries BSD `date -v` first and then GNU `date -d`.
-- `healthcheck.sh` needs an `nc` that supports `-z` and `-w`.
-- `ssh-audit.sh` reads permissions from `ls -l` rather than `stat`, because
-  `stat` flags differ between BSD and GNU.
-- With `set -u`, bash 3.2 and 4.0 to 4.3 treat an empty array as unset, so
-  arrays are expanded as `${arr[@]+"${arr[@]}"}`.
+Other differences that the scripts deal with: `healthcheck.sh` needs an `nc`
+with `-z` and `-w`; `ssh-audit.sh` reads permissions from `ls -l` because `stat`
+flags differ; `df -i` output has a different layout on macOS and Linux and both
+are parsed.
