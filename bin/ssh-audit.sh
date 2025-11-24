@@ -14,6 +14,7 @@ Checks, in SSH_DIR (default ~/.ssh):
   - private keys are not accessible by group or others
   - private keys without a passphrase (reported as a warning)
   - weak keys: DSA, or RSA smaller than 2048 bits
+  - authorized_keys or config writable by group or others
   - duplicate entries in authorized_keys
   - known_hosts entries that are not hashed
   - with -H: hosts from HOSTS_FILE (one per line) that are not in known_hosts
@@ -120,6 +121,21 @@ for key in "$dir"/*; do
                      finding "$key" "RSA key is $bits bits, 3072 or ed25519 is recommended"
                  fi ;;
         esac
+    fi
+done
+
+# sshd ignores authorized_keys (StrictModes) and ssh refuses a config file that
+# other users can write to
+# writable_by_others PATH - true if the group or other write bit is set
+writable_by_others() {
+    local mode
+    mode=$(ls -ld "$1" | cut -c1-10)
+    [[ ${mode:5:1} == w || ${mode:8:1} == w ]]
+}
+
+for f in authorized_keys config; do
+    if [[ -f $dir/$f ]] && writable_by_others "$dir/$f"; then
+        finding "$dir/$f" "is writable by group or others (want chmod 600 or 644)"
     fi
 done
 

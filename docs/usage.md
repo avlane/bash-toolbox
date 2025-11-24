@@ -441,6 +441,7 @@ Checks, in SSH_DIR (default ~/.ssh):
   - private keys are not accessible by group or others
   - private keys without a passphrase (reported as a warning)
   - weak keys: DSA, or RSA smaller than 2048 bits
+  - authorized_keys or config writable by group or others
   - duplicate entries in authorized_keys
   - known_hosts entries that are not hashed
   - with -H: hosts from HOSTS_FILE (one per line) that are not in known_hosts

@@ -75,6 +75,20 @@ test_hosts_file_with_windows_line_endings() {
     assert_status 0 "host name without a trailing CR is found" "$ROOT/bin/ssh-audit.sh" -d "$d" -H "$WORK/hostlist2"
 }
 
+test_flags_writable_config_files() {
+    d="$WORK/writable"
+    mkdir -p "$d" && chmod 700 "$d"
+    echo "Host *" > "$d/config"
+    echo "# nothing" > "$d/authorized_keys"
+    chmod 644 "$d/config" "$d/authorized_keys"
+    assert_status 0 "644 is fine" "$ROOT/bin/ssh-audit.sh" -d "$d"
+    chmod 664 "$d/config"
+    chmod 666 "$d/authorized_keys"
+    out=$("$ROOT/bin/ssh-audit.sh" -d "$d" || true)
+    assert_contains "$out" "$d/config: is writable" "group-writable config"
+    assert_contains "$out" "$d/authorized_keys: is writable" "world-writable authorized_keys"
+}
+
 test_verbose_lists_fingerprints() {
     d="$WORK/verbose"
     mkdir -p "$d" && chmod 700 "$d"
