@@ -15,7 +15,7 @@ run_tests
 SAMPLE
 
 test_reports_each_outcome() {
-    out=$(bash "$WORK/sample.sh" || true)
+    out=$(env -u TB_TEST_QUIET -u TB_TEST_FILTER bash "$WORK/sample.sh" || true)
     assert_contains "$out" "ok - test_a_passes" "pass is reported"
     assert_contains "$out" "not ok - test_b_fails" "failure is reported"
     assert_contains "$out" "ok - test_c_skips # SKIP not today" "skip is reported"
@@ -31,7 +31,7 @@ test_wrong_too() { assert_not_contains "hello" "ell" "needle present"; }
 test_wrong_file() { assert_file_missing /tmp "tmp exists"; }
 run_tests
 HELPERS
-    out=$(bash "$WORK/helpers.sh" || true)
+    out=$(env -u TB_TEST_QUIET -u TB_TEST_FILTER bash "$WORK/helpers.sh" || true)
     assert_contains "$out" "ok - test_present" "positive cases pass"
     assert_contains "$out" "not ok - test_wrong" "assert_contains fails when missing"
     assert_contains "$out" "not ok - test_wrong_too" "assert_not_contains fails when present"
@@ -39,14 +39,22 @@ HELPERS
 }
 
 test_summary_line() {
-    out=$(bash "$WORK/sample.sh" | tail -n 1 || true)
+    out=$(env -u TB_TEST_QUIET -u TB_TEST_FILTER bash "$WORK/sample.sh" | tail -n 1 || true)
     assert_eq "# tests: 3, failed: 1, skipped: 1, assertions passed: 1, failed: 1" "$out" "summary counts"
 }
 
+test_quiet_and_filter_options() {
+    out=$(TB_TEST_QUIET=1 bash "$WORK/sample.sh" || true)
+    assert_not_contains "$out" "ok - test_a_passes" "quiet mode hides passing tests"
+    assert_contains "$out" "not ok - test_b_fails" "but not failures"
+    out=$(TB_TEST_FILTER=passes bash "$WORK/sample.sh" || true)
+    assert_contains "$out" "# tests: 1, failed: 0" "filter selects by name"
+}
+
 test_exit_status_follows_failures() {
-    assert_status 1 "a failing test gives a non-zero status" bash "$WORK/sample.sh"
+    assert_status 1 "a failing test gives a non-zero status" env -u TB_TEST_QUIET -u TB_TEST_FILTER bash "$WORK/sample.sh"
     printf '. "%s"\ntest_ok() { assert_eq a a x; }\nrun_tests\n' "$HARNESS" > "$WORK/good.sh"
-    assert_status 0 "all passing gives zero" bash "$WORK/good.sh"
+    assert_status 0 "all passing gives zero" env -u TB_TEST_QUIET -u TB_TEST_FILTER bash "$WORK/good.sh"
 }
 
 run_tests

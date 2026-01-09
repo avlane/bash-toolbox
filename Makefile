@@ -1,7 +1,12 @@
-.PHONY: test lint docs
+.PHONY: test test-verbose lint docs
 
 test:
 	bash tests/run.sh
+
+# make test-verbose, or run tests/run.sh -h style options directly:
+#   tests/run.sh -f dry_run retry
+test-verbose:
+	bash tests/run.sh -v
 
 # syntax check only; run shellcheck on top of this if you have it
 lint:

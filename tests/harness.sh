@@ -10,6 +10,10 @@
 # the same shell. Output is TAP-like: "ok - name", "not ok - name" (followed by
 # "# " detail lines) and "ok - name # SKIP reason", then a summary line.
 # run_tests returns non-zero if any test failed.
+#
+# Environment:
+#   TB_TEST_QUIET=1     do not print "ok - ..." lines (failures and the summary stay)
+#   TB_TEST_FILTER=TEXT only run test functions whose name contains TEXT
 
 PASS=0         # assertions that passed
 FAIL=0         # assertions that failed
@@ -90,6 +94,10 @@ run_tests() {
     local t before names
     names=$(declare -F | awk '{print $3}' | grep '^test_' || true)
     for t in $names; do
+        case $t in
+            *"${TB_TEST_FILTER:-}"*) ;;
+            *) continue ;;
+        esac
         TESTS_RUN=$((TESTS_RUN + 1))
         before=$FAIL
         SKIP_REASON=
@@ -100,7 +108,7 @@ run_tests() {
         elif [ "$FAIL" -ne "$before" ]; then
             TESTS_FAILED=$((TESTS_FAILED + 1))
             echo "not ok - $t"
-        else
+        elif [ -z "${TB_TEST_QUIET:-}" ]; then
             echo "ok - $t"
         fi
     done
