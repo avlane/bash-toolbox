@@ -11,7 +11,8 @@ usage: retry.sh [-t TRIES] [-d DELAY] [-m MAXDELAY] [-T SECONDS] [-j] [-r CODES]
 
 Run COMMAND until it exits 0. After each failure wait DELAY seconds, doubling
 the wait every time up to MAXDELAY. Exits 0 on success, or with the exit status
-of the last attempt once TRIES attempts have failed.
+of the last attempt once TRIES attempts have failed. A command that was killed
+by SIGINT or SIGTERM (status 130 or 143) is not started again.
 
 options:
   -t TRIES     maximum attempts (default 5)
@@ -72,6 +73,12 @@ while true; do
         exit 0
     else
         status=$?
+    fi
+    # 130 and 143 mean the command was killed by SIGINT or SIGTERM: someone
+    # wanted it stopped, so do not start it again
+    if (( status == 130 || status == 143 )); then
+        tb_log "command was interrupted (status $status), not retrying"
+        exit "$status"
     fi
     if [[ -n $retry_codes && ,$retry_codes, != *,$status,* ]]; then
         tb_log "exit status $status is not in the retry list, not retrying"

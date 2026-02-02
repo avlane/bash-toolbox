@@ -59,6 +59,15 @@ SCRIPT
     assert_eq "1" "$(wc -l < "$WORK/count" | tr -d ' ')" "ran once"
 }
 
+test_does_not_retry_an_interrupted_command() {
+    rm -f "$WORK/runs"
+    assert_status 130 "SIGINT-killed command ends the run" "$ROOT/bin/retry.sh" -t 4 bash -c "echo x >> '$WORK/runs'; kill -INT \$\$"
+    assert_eq "1" "$(wc -l < "$WORK/runs" | tr -d ' ')" "started only once"
+    rm -f "$WORK/runs"
+    assert_status 143 "same for SIGTERM" "$ROOT/bin/retry.sh" -t 4 bash -c "echo x >> '$WORK/runs'; kill -TERM \$\$"
+    assert_eq "1" "$(wc -l < "$WORK/runs" | tr -d ' ')" "started only once"
+}
+
 test_rejects_bad_code_list() {
     assert_status 2 "bad -r" "$ROOT/bin/retry.sh" -r one,two true
 }

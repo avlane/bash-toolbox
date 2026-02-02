@@ -340,7 +340,8 @@ usage: retry.sh [-t TRIES] [-d DELAY] [-m MAXDELAY] [-T SECONDS] [-j] [-r CODES]
 
 Run COMMAND until it exits 0. After each failure wait DELAY seconds, doubling
 the wait every time up to MAXDELAY. Exits 0 on success, or with the exit status
-of the last attempt once TRIES attempts have failed.
+of the last attempt once TRIES attempts have failed. A command that was killed
+by SIGINT or SIGTERM (status 130 or 143) is not started again.
 
 options:
   -t TRIES     maximum attempts (default 5)
