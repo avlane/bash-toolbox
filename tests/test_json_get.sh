@@ -34,6 +34,16 @@ test_quoted_string_without_raw() {
     assert_eq '"box"' "$("$ROOT/bin/json-get.sh" name "$WORK/doc.json")" "string keeps quotes"
 }
 
+test_escaped_quotes_and_backslashes() {
+    cat > "$WORK/esc.json" <<'JSON'
+{"q": "say \"hi\" now", "after": "next", "path": "C:\\dir\\", "mix": "a\\\"b"}
+JSON
+    assert_eq 'say "hi" now' "$("$ROOT/bin/json-get.sh" -r q "$WORK/esc.json")" "escaped quotes inside a string"
+    assert_eq 'C:\dir\' "$("$ROOT/bin/json-get.sh" -r path "$WORK/esc.json")" "doubled backslashes, string ending in one"
+    assert_eq 'a\"b' "$("$ROOT/bin/json-get.sh" -r mix "$WORK/esc.json")" "backslash followed by an escaped quote"
+    assert_eq "next" "$("$ROOT/bin/json-get.sh" -r after "$WORK/esc.json")" "the next key is still found after an escaped quote"
+}
+
 test_array_index() {
     assert_eq "a b" "$("$ROOT/bin/json-get.sh" -r '.tags[0]' "$WORK/doc.json")" "first element, string with space"
     assert_eq "42" "$("$ROOT/bin/json-get.sh" 'tags[2]' "$WORK/doc.json")" "number element"

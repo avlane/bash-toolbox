@@ -302,8 +302,10 @@ from standard input when FILE is omitted or "-".
 Uses jq when it is installed. Without jq (or with TB_NO_JQ=1) a small bash
 fallback is used. The fallback understands plain object keys nested with dots,
 and an index into an array of plain values (.tags[1]). It prints strings,
-numbers, true, false and null; it does not print objects or arrays, cannot look
-inside arrays of objects, and does not handle escaped quotes in strings.
+numbers, true, false and null; it does not print objects or arrays and cannot
+look inside arrays of objects. In strings, escapes such as backslash-n and
+backslash-u00e9 are passed through as written; only backslash-quote and a double
+backslash are unescaped (with -r).
 Install jq if you need more.
 
 options:
