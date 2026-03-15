@@ -9,7 +9,7 @@ usage() {
     cat <<'USAGE'
 usage: restore-backup.sh [-f] [-l] ARCHIVE DEST_DIR
 
-Verify ARCHIVE against ARCHIVE.sha256 (when that file exists) and extract it
+Verify ARCHIVE (.tar.gz, .tgz or .tar.zst) against ARCHIVE.sha256 (when that file exists) and extract it
 into DEST_DIR. Refuses to extract if
 
   - the checksum does not match,
@@ -49,7 +49,14 @@ else
     tb_warn "no $archive.sha256, skipping the checksum check"
 fi
 
-tb_readlines entries < <(tar -tzf "$archive")
+# the archive's compression follows its file name
+case $archive in
+    *.tar.zst) tb_require_cmd zstd; decompress=(zstd -dc) ;;
+    *.tar.gz|*.tgz) decompress=(gzip -dc) ;;
+    *) tb_die "do not know how to read $archive (expected .tar.gz, .tgz or .tar.zst)" ;;
+esac
+
+tb_readlines entries < <("${decompress[@]}" "$archive" | tar -tf -)
 for entry in ${entries[@]+"${entries[@]}"}; do
     case $entry in
         /*) tb_die "refusing to extract: absolute path in archive: $entry" ;;
@@ -69,5 +76,5 @@ if [[ -d $dest && -n $(ls -A "$dest") ]] && (( ! force )); then
     tb_die "$dest is not empty (use -f to extract anyway)"
 fi
 mkdir -p "$dest"
-tar -xzf "$archive" -C "$dest"
+"${decompress[@]}" "$archive" | tar -xf - -C "$dest"
 echo "restored ${#entries[@]} entries to $dest"

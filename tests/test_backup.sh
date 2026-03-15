@@ -107,6 +107,27 @@ STUB
     assert_eq "0" "$(ls -A "$WORK/rbdest" | wc -l | tr -d ' ')" "nothing is left in the destination"
 }
 
+test_zstd_archive() {
+    command -v zstd >/dev/null || { skip "zstd is not installed"; return 0; }
+    mkdir -p "$WORK/zs/proj"
+    echo zdata > "$WORK/zs/proj/f"
+    out=$("$ROOT/bin/backup.sh" -z zstd "$WORK/zs/proj" "$WORK/zsdest")
+    archive=${out#wrote }
+    assert_contains "$archive" ".tar.zst" "extension follows the compression"
+    assert_eq "proj/f" "$(zstd -dc "$archive" | tar -tf - | grep -v '/$')" "contents readable with zstd"
+    . "$ROOT/lib/common.sh"
+    assert_status 0 "checksum verifies" tb_sha256_verify "$archive.sha256"
+}
+
+test_zstd_retention_and_bad_tool() {
+    command -v zstd >/dev/null || { skip "zstd is not installed"; return 0; }
+    mkdir -p "$WORK/zk/proj" "$WORK/zkdest"
+    touch -t 201901010000 "$WORK/zkdest/proj-20190101-000000.tar.zst"
+    "$ROOT/bin/backup.sh" -z zstd -k 1 "$WORK/zk/proj" "$WORK/zkdest" >/dev/null
+    assert_eq "1" "$(ls "$WORK/zkdest" | grep -c 'tar.zst$')" "old zstd archive pruned"
+    assert_status 2 "unknown compression" "$ROOT/bin/backup.sh" -z bzip9 "$WORK/zk/proj" "$WORK/zkdest"
+}
+
 test_dry_run_writes_nothing() {
     mkdir -p "$WORK/dr/proj"
     out=$("$ROOT/bin/backup.sh" -n "$WORK/dr/proj" "$WORK/drdest")

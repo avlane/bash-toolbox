@@ -59,4 +59,16 @@ test_dotdot_inside_a_name_is_fine() {
     assert_status 0 "file..txt is not a traversal" "$RS" "$WORK/dd.tar.gz" "$WORK/out7"
 }
 
+test_restores_zstd_archive() {
+    command -v zstd >/dev/null || { skip "zstd is not installed"; return 0; }
+    zarchive=$("$ROOT/bin/backup.sh" -z zstd "$WORK/src/proj" "$WORK/zbk" | sed 's/^wrote //')
+    "$RS" "$zarchive" "$WORK/zout" >/dev/null 2>&1
+    assert_eq "hello" "$(cat "$WORK/zout/proj/sub/file.txt")" "zstd archive restored"
+}
+
+test_unknown_extension() {
+    echo x > "$WORK/odd.zip"
+    assert_status 1 "unknown archive type" "$RS" "$WORK/odd.zip" "$WORK/out8"
+}
+
 run_tests
