@@ -59,7 +59,7 @@ options:
 ## db-backup-mysql.sh
 
 ```
-usage: db-backup-mysql.sh [-H HOST] [-P PORT] [-u USER] [-k KEEP] [-n] DEST_DIR DATABASE...
+usage: db-backup-mysql.sh [-H HOST] [-P PORT] [-u USER] [-F OPTION_FILE] [-k KEEP] [-n] DEST_DIR DATABASE...
        db-backup-mysql.sh [options] -A DEST_DIR
 
 Dump each DATABASE with mysqldump (--single-transaction, so InnoDB tables are
@@ -74,6 +74,10 @@ options:
   -H HOST      server host
   -P PORT      server port
   -u USER      user name
+  -F FILE      MySQL option file with a [client] section (user, password, host,
+               ...) to pass to mysqldump as --defaults-extra-file. It must not
+               be readable by group or others (chmod 600), as mysql itself
+               would warn; the script refuses it otherwise
   -k KEEP      keep only the newest KEEP dumps per database (default 7, 0 = keep all)
   -n           dry run
   -h, --help   show this help

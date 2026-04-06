@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: db-backup-mysql.sh [-H HOST] [-P PORT] [-u USER] [-k KEEP] [-n] DEST_DIR DATABASE...
+usage: db-backup-mysql.sh [-H HOST] [-P PORT] [-u USER] [-F OPTION_FILE] [-k KEEP] [-n] DEST_DIR DATABASE...
        db-backup-mysql.sh [options] -A DEST_DIR
 
 Dump each DATABASE with mysqldump (--single-transaction, so InnoDB tables are
@@ -22,6 +22,10 @@ options:
   -H HOST      server host
   -P PORT      server port
   -u USER      user name
+  -F FILE      MySQL option file with a [client] section (user, password, host,
+               ...) to pass to mysqldump as --defaults-extra-file. It must not
+               be readable by group or others (chmod 600), as mysql itself
+               would warn; the script refuses it otherwise
   -k KEEP      keep only the newest KEEP dumps per database (default 7, 0 = keep all)
   -n           dry run
   -h, --help   show this help
@@ -34,16 +38,17 @@ USAGE
 
 tb_handle_help usage "$@"
 
-host= port= user=
+host= port= user= optfile=
 all=0
 keep=7
 dry=0
-while getopts ':AH:P:u:k:nh' opt; do
+while getopts ':AH:P:u:F:k:nh' opt; do
     case $opt in
         A) all=1 ;;
         H) host=$OPTARG ;;
         P) port=$OPTARG ;;
         u) user=$OPTARG ;;
+        F) optfile=$OPTARG ;;
         k) keep=$OPTARG ;;
         n) dry=1 ;;
         h) usage; exit 0 ;;
@@ -62,10 +67,19 @@ fi
 dest=$1
 shift
 
+if [[ -n $optfile ]]; then
+    [[ -f $optfile ]] || tb_die "$optfile is not a file"
+    mode=$(ls -l "$optfile" | cut -c1-10)
+    [[ ${mode:4:6} == ------ ]] || tb_die "$optfile is accessible by group or others, run: chmod 600 $optfile"
+    [[ -z ${MYSQL_BACKUP_PASSWORD:-} ]] || tb_usage_error "use either -F or MYSQL_BACKUP_PASSWORD, not both (mysqldump takes one --defaults-extra-file)"
+fi
+
 cnf=
 trap '[[ -z $cnf ]] || rm -f "$cnf"' EXIT
 defaults=()
-if [[ -n ${MYSQL_BACKUP_PASSWORD:-} ]]; then
+if [[ -n $optfile ]]; then
+    defaults=(--defaults-extra-file="$optfile")
+elif [[ -n ${MYSQL_BACKUP_PASSWORD:-} ]]; then
     cnf=$(mktemp "${TMPDIR:-/tmp}/mysql-backup.XXXXXX")   # mktemp creates it mode 0600
     pw=${MYSQL_BACKUP_PASSWORD//\\/\\\\}
     pw=${pw//\"/\\\"}

@@ -165,6 +165,25 @@ shop" "$(ls "$WORK/my4" | sed 's/-[0-9]*-[0-9]*\.sql\.gz$//' | sort)" "only user
     assert_status 2 "-A with database names" "$ROOT/bin/db-backup-mysql.sh" -A "$WORK/my5" shop
 }
 
+test_mysql_option_file() {
+    printf '[client]\nuser=backup\npassword=s3cret\n' > "$WORK/my.cnf"
+    chmod 600 "$WORK/my.cnf"
+    : > "$STUB_LOG"
+    "$ROOT/bin/db-backup-mysql.sh" -F "$WORK/my.cnf" "$WORK/my6" shop >/dev/null
+    assert_eq "defaults-file" "$(head -n 1 "$STUB_LOG")" "option file passed first"
+    assert_eq "password=s3cret" "$(sed -n 3p "$STUB_LOG.cnf")" "it is the caller's file"
+}
+
+test_mysql_option_file_must_be_private() {
+    printf '[client]\npassword=s3cret\n' > "$WORK/open.cnf"
+    chmod 644 "$WORK/open.cnf"
+    assert_status 1 "world-readable option file" "$ROOT/bin/db-backup-mysql.sh" -F "$WORK/open.cnf" "$WORK/my7" shop
+    assert_file_missing "$WORK/my7" "nothing dumped"
+    chmod 600 "$WORK/open.cnf"
+    assert_status 2 "-F together with the password variable" env MYSQL_BACKUP_PASSWORD=x "$ROOT/bin/db-backup-mysql.sh" -F "$WORK/open.cnf" "$WORK/my7" shop
+    assert_status 1 "missing option file" "$ROOT/bin/db-backup-mysql.sh" -F "$WORK/nope.cnf" "$WORK/my7" shop
+}
+
 test_mysql_failed_dump() {
     export STUB_FAIL=bad
     assert_status 1 "failed dump gives exit 1" "$ROOT/bin/db-backup-mysql.sh" "$WORK/my2" bad
