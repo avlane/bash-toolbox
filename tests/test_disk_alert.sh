@@ -123,6 +123,35 @@ test_json_output() {
     assert_status 1 "exit status unchanged" "$ROOT/bin/disk-alert.sh" -j 90
 }
 
+# df output like a Mac's: pseudo filesystems that always report 100%
+cat > "$WORK/fake-df-mac" <<'FAKE'
+#!/bin/bash
+echo "Filesystem 512-blocks Used Available Capacity Mounted on"
+echo "/dev/disk3s1s1 1000 500 500 50% /"
+echo "devfs 410 410 0 100% /dev"
+echo "map auto_home 0 0 0 100% /System/Volumes/Data/home"
+echo "/dev/disk3s5 1000 950 50 95% /System/Volumes/Data"
+echo "/dev/disk9 1000 990 10 99% /Volumes/Backup Drive"
+FAKE
+chmod +x "$WORK/fake-df-mac"
+
+test_pseudo_filesystems_are_skipped() {
+    out=$(DF_CMD="$WORK/fake-df-mac" "$ROOT/bin/disk-alert.sh" 90 || true)
+    assert_eq "WARNING: /System/Volumes/Data is at 95% (/dev/disk3s5)
+WARNING: /Volumes/Backup Drive is at 99% (/dev/disk9)" "$out" "devfs and map are not reported"
+}
+
+test_all_filesystems_with_dash_a() {
+    out=$(DF_CMD="$WORK/fake-df-mac" "$ROOT/bin/disk-alert.sh" -a 90 || true)
+    assert_contains "$out" "WARNING: /dev is at 100% (devfs)" "devfs shows up with -a"
+}
+
+test_extra_skip_regex() {
+    out=$(DF_CMD="$WORK/fake-df-mac" "$ROOT/bin/disk-alert.sh" -x '^/Volumes/|disk3s5$' 90 || true)
+    assert_eq "" "$out" "mount point and device matches both skip"
+    DF_CMD="$WORK/fake-df-mac" assert_status 0 "nothing left to report" "$ROOT/bin/disk-alert.sh" -x '^/Volumes/|/Data$' 90
+}
+
 test_bad_threshold() {
     assert_status 2 "non numeric threshold" "$ROOT/bin/disk-alert.sh" lots
 }

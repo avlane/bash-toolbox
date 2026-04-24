@@ -147,7 +147,7 @@ The SQL login's password is read from the SQLCMDPASSWORD environment variable
 ## disk-alert.sh
 
 ```
-usage: disk-alert.sh [-i INODE_PERCENT] [-c FILE] [-w URL] [-j] [PERCENT]
+usage: disk-alert.sh [-i INODE_PERCENT] [-c FILE] [-x REGEX] [-a] [-w URL] [-j] [PERCENT]
 
 Print a line for every filesystem whose space usage is at or over PERCENT
 (default 90). With -i, also report filesystems whose inode usage is at or over
@@ -156,6 +156,12 @@ INODE_PERCENT; a disk can run out of inodes long before it runs out of space.
 With -c, FILE holds per-mount overrides, one "MOUNTPOINT PERCENT" pair per
 line (blank lines and # comments are ignored; mount points cannot contain
 spaces). An override replaces PERCENT for that mount, in both checks.
+
+Pseudo filesystems are skipped unless -a is given: devfs, map (the macOS
+automounter), tmpfs, overlay, squashfs, shm, none, fdescfs, procfs, autofs and
+nsfs. They are always "100% full" or meaningless. -x adds an extended regular
+expression; a filesystem is skipped when it matches the device column or the
+mount point.
 
 With -w, when anything is over a threshold the findings are also POSTed to URL
 as JSON ({"host": ..., "alerts": [...]}), for example to a chat webhook or a

@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: disk-alert.sh [-i INODE_PERCENT] [-c FILE] [-w URL] [-j] [PERCENT]
+usage: disk-alert.sh [-i INODE_PERCENT] [-c FILE] [-x REGEX] [-a] [-w URL] [-j] [PERCENT]
 
 Print a line for every filesystem whose space usage is at or over PERCENT
 (default 90). With -i, also report filesystems whose inode usage is at or over
@@ -16,6 +16,12 @@ INODE_PERCENT; a disk can run out of inodes long before it runs out of space.
 With -c, FILE holds per-mount overrides, one "MOUNTPOINT PERCENT" pair per
 line (blank lines and # comments are ignored; mount points cannot contain
 spaces). An override replaces PERCENT for that mount, in both checks.
+
+Pseudo filesystems are skipped unless -a is given: devfs, map (the macOS
+automounter), tmpfs, overlay, squashfs, shm, none, fdescfs, procfs, autofs and
+nsfs. They are always "100% full" or meaningless. -x adds an extended regular
+expression; a filesystem is skipped when it matches the device column or the
+mount point.
 
 With -w, when anything is over a threshold the findings are also POSTed to URL
 as JSON ({"host": ..., "alerts": [...]}), for example to a chat webhook or a
@@ -33,14 +39,17 @@ USAGE
 
 tb_handle_help usage "$@"
 
-inode_limit= conf= webhook=
+inode_limit= conf= webhook= extra_skip=
 json=0
-while getopts ':i:c:w:jh' opt; do
+all_fs=0
+while getopts ':i:c:w:x:ajh' opt; do
     case $opt in
         i) inode_limit=$OPTARG ;;
         c) conf=$OPTARG ;;
         w) webhook=$OPTARG ;;
         j) json=1 ;;
+        x) extra_skip=$OPTARG ;;
+        a) all_fs=1 ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
         *) tb_usage_error "unknown option -$OPTARG" ;;
@@ -112,6 +121,19 @@ parse_df() {
     }'
 }
 
+pseudo_fs='^(devfs|map|tmpfs|overlay|squashfs|shm|none|fdescfs|procfs|autofs|nsfs)$'
+
+# skipped FS MOUNT - true for filesystems that should not be reported
+skipped() {
+    if (( ! all_fs )) && [[ $1 =~ $pseudo_fs ]]; then
+        return 0
+    fi
+    if [[ -n $extra_skip ]] && { [[ $1 =~ $extra_skip ]] || [[ $2 =~ $extra_skip ]]; }; then
+        return 0
+    fi
+    return 1
+}
+
 status=0
 alerts=()
 report() {
@@ -121,6 +143,7 @@ report() {
 }
 
 while IFS=$'\t' read -r fs pct mount; do
+    ! skipped "$fs" "$mount" || continue
     if (( ${pct%\%} >= $(limit_for "$mount" "$limit") )); then
         report "WARNING: $mount is at $pct ($fs)"
     fi
@@ -128,6 +151,7 @@ done < <(${DF_CMD:-df -P} | parse_df first)
 
 if [[ -n $inode_limit ]]; then
     while IFS=$'\t' read -r fs pct mount; do
+        ! skipped "$fs" "$mount" || continue
         if (( ${pct%\%} >= $(limit_for "$mount" "$inode_limit") )); then
             report "WARNING: $mount has used $pct of its inodes ($fs)"
         fi
