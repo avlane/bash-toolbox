@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: ssh-audit.sh [-d SSH_DIR] [-H HOSTS_FILE] [-s] [-v] [-j]
+usage: ssh-audit.sh [-d SSH_DIR] [-H HOSTS_FILE] [-s] [-v] [-j] [-F [-y]]
 
 Checks, in SSH_DIR (default ~/.ssh):
   - the directory is not accessible by group or others
@@ -27,6 +27,8 @@ where "keys" is only filled in together with -v.
 options:
   -d DIR      directory to audit
   -s          strict: also flag RSA keys smaller than 3072 bits
+  -F          show the chmod commands that would fix permission findings
+  -y          with -F, actually run them (never changes anything else)
   -j          print the result as JSON
   -v          list every private key with its type, size and fingerprint
   -H FILE     list of host names that should already be in known_hosts
@@ -41,13 +43,17 @@ hosts_file=
 strict=0
 verbose=0
 json=0
-while getopts ':d:H:svjh' opt; do
+fix=0
+apply=0
+while getopts ':d:H:svjFyh' opt; do
     case $opt in
         d) dir=$OPTARG ;;
         H) hosts_file=$OPTARG ;;
         s) strict=1 ;;
         v) verbose=1 ;;
         j) json=1 ;;
+        F) fix=1 ;;
+        y) apply=1 ;;
         h) usage; exit 0 ;;
         :) tb_usage_error "option -$OPTARG needs an argument" ;;
         *) tb_usage_error "unknown option -$OPTARG" ;;
@@ -55,6 +61,8 @@ while getopts ':d:H:svjh' opt; do
 done
 shift $((OPTIND - 1))
 
+(( ! apply )) || (( fix )) || tb_usage_error "-y only makes sense together with -F"
+(( ! (fix && json) )) || tb_usage_error "-F and -j cannot be combined"
 [[ -d $dir ]] || tb_die "$dir is not a directory"
 tb_require_cmd ssh-keygen
 
@@ -70,6 +78,14 @@ finding() {
     fi
 }
 
+# permission findings remember a chmod that would fix them
+fix_modes=()
+fix_paths=()
+suggest_chmod() {
+    fix_modes+=("$1")
+    fix_paths+=("$2")
+}
+
 # open_to_others PATH - true if group or other have any permission bit
 open_to_others() {
     local mode
@@ -79,6 +95,7 @@ open_to_others() {
 
 if open_to_others "$dir"; then
     finding "$dir" "directory is accessible by group or others (want chmod 700)"
+    suggest_chmod 700 "$dir"
 fi
 
 # a private key starts with a BEGIN ... PRIVATE KEY line
@@ -92,6 +109,7 @@ for key in "$dir"/*; do
 
     if open_to_others "$key"; then
         finding "$key" "private key is accessible by group or others (want chmod 600)"
+        suggest_chmod 600 "$key"
     fi
 
     # ssh-keygen -y with an empty passphrase only succeeds if there is none
@@ -136,6 +154,7 @@ writable_by_others() {
 for f in authorized_keys config; do
     if [[ -f $dir/$f ]] && writable_by_others "$dir/$f"; then
         finding "$dir/$f" "is writable by group or others (want chmod 600 or 644)"
+        suggest_chmod go-w "$dir/$f"
     fi
 done
 
@@ -169,6 +188,19 @@ if [[ -n $hosts_file ]]; then
             finding "$host" "not found in $known"
         fi
     done < <(tb_cat_unix "$hosts_file")
+fi
+
+if (( fix && ${#fix_paths[@]} > 0 )); then
+    echo
+    for i in "${!fix_paths[@]}"; do
+        if (( apply )); then
+            chmod "${fix_modes[i]}" "${fix_paths[i]}"
+            echo "ran: chmod ${fix_modes[i]} ${fix_paths[i]}"
+        else
+            echo "would run: chmod ${fix_modes[i]} ${fix_paths[i]}"
+        fi
+    done
+    (( apply )) || echo "(add -y to apply these)"
 fi
 
 if (( json )); then

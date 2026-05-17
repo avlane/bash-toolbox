@@ -449,7 +449,7 @@ options:
 ## ssh-audit.sh
 
 ```
-usage: ssh-audit.sh [-d SSH_DIR] [-H HOSTS_FILE] [-s] [-v] [-j]
+usage: ssh-audit.sh [-d SSH_DIR] [-H HOSTS_FILE] [-s] [-v] [-j] [-F [-y]]
 
 Checks, in SSH_DIR (default ~/.ssh):
   - the directory is not accessible by group or others
@@ -469,6 +469,8 @@ where "keys" is only filled in together with -v.
 options:
   -d DIR      directory to audit
   -s          strict: also flag RSA keys smaller than 3072 bits
+  -F          show the chmod commands that would fix permission findings
+  -y          with -F, actually run them (never changes anything else)
   -j          print the result as JSON
   -v          list every private key with its type, size and fingerprint
   -H FILE     list of host names that should already be in known_hosts

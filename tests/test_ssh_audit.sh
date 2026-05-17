@@ -89,6 +89,28 @@ test_flags_writable_config_files() {
     assert_contains "$out" "$d/authorized_keys: is writable" "world-writable authorized_keys"
 }
 
+test_fix_permissions_dry_and_applied() {
+    d="$WORK/fixme"
+    mkdir -p "$d" && chmod 755 "$d"
+    ssh-keygen -q -t ed25519 -N 'a b c' -f "$d/id_ed25519"
+    chmod 644 "$d/id_ed25519"
+    echo "Host *" > "$d/config"
+    chmod 666 "$d/config"
+    out=$("$ROOT/bin/ssh-audit.sh" -F -d "$d" || true)
+    assert_contains "$out" "would run: chmod 700 $d" "directory fix is proposed"
+    assert_contains "$out" "would run: chmod 600 $d/id_ed25519" "key fix is proposed"
+    assert_contains "$out" "would run: chmod go-w $d/config" "config fix is proposed"
+    assert_eq "644" "$(ls -l "$d/id_ed25519" | cut -c5-10 | sed 's/r--r--/644/')" "nothing changed without -y"
+    "$ROOT/bin/ssh-audit.sh" -F -y -d "$d" >/dev/null || true
+    assert_status 0 "second audit is clean" "$ROOT/bin/ssh-audit.sh" -d "$d"
+    assert_eq "------" "$(ls -ld "$d/id_ed25519" | cut -c5-10)" "key is private now"
+}
+
+test_fix_option_combinations() {
+    assert_status 2 "-y alone" "$ROOT/bin/ssh-audit.sh" -y -d "$WORK"
+    assert_status 2 "-F with -j" "$ROOT/bin/ssh-audit.sh" -F -j -d "$WORK"
+}
+
 test_verbose_lists_fingerprints() {
     d="$WORK/verbose"
     mkdir -p "$d" && chmod 700 "$d"
