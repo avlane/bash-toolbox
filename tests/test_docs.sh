@@ -19,6 +19,13 @@ test_every_script_answers_help() {
     done
 }
 
+test_every_script_reports_the_version() {
+    version=$(cat "$ROOT/VERSION")
+    for script in "$ROOT"/bin/*.sh; do
+        assert_eq "$(basename "$script") $version" "$("$script" --version)" "$(basename "$script") --version"
+    done
+}
+
 test_every_script_is_executable_with_a_shebang() {
     for script in "$ROOT"/bin/*.sh; do
         [ -x "$script" ] || assert_eq "executable" "not executable" "$(basename "$script") is executable"

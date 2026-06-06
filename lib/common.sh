@@ -5,6 +5,7 @@
 # Written to work with bash 3.2 (macOS) as well as newer versions.
 
 tb_prog=${tb_prog:-$(basename "$0")}
+TB_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 
 # Colour is used for warnings and errors only when standard error is a terminal,
 # TERM is not "dumb" and NO_COLOR is not set (https://no-color.org). TB_FORCE_COLOR=1
@@ -51,13 +52,15 @@ tb_usage_error() {
     exit "${tb_usage_status:-2}"
 }
 
-# tb_handle_help USAGE_FUNCTION ARGS... - handle --help (getopts has no long options)
+# tb_handle_help USAGE_FUNCTION ARGS... - handle --help and --version (getopts
+# has no long options). The version is the one line in the VERSION file.
 tb_handle_help() {
     local fn=$1 arg
     shift
     for arg in "$@"; do
         case $arg in
             --help) "$fn"; exit 0 ;;
+            --version) printf '%s %s\n' "$tb_prog" "$(cat "$TB_ROOT/VERSION")"; exit 0 ;;
             --) break ;;
         esac
     done
