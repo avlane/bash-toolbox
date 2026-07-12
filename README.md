@@ -9,6 +9,7 @@ a few other chores. Nothing here is clever, it is just written down once.
 - [Examples](#examples)
 - [Exit codes](#exit-codes)
 - [Tests](#tests)
+- [Troubleshooting](#troubleshooting)
 - [Continuous integration](#continuous-integration)
 - [Portability](#portability)
 
@@ -39,6 +40,8 @@ on a usage error. Shared helpers are in `lib/common.sh`.
 | `ssh-audit.sh [-d DIR] [-H HOSTS] [-s] [-v]` | key permissions, missing passphrases, weak keys, duplicate authorized_keys, unhashed known_hosts |
 | `bootstrap-dotfiles.sh [-n] [-t DIR] [-m MANIFEST] DIR` | link entries of `DIR` as `~/.name`, idempotent, keeping `.bak` copies |
 | `db-backup-sqlserver.sh [-S SRV] [-V] [-C] DEST DB...` | `BACKUP DATABASE` through `sqlcmd` |
+
+Every script also answers `--version` (the contents of the `VERSION` file).
 
 ## Exit codes
 
@@ -71,6 +74,25 @@ bin/retry.sh -t 6 -d 2 curl -fsSLO https://example.com/file.tgz
 # who has stale merged branches?
 bin/git-stale-branches.sh -d 60 -m main -s ~/src/project
 ```
+
+## Troubleshooting
+
+- **`bad substitution` or `declare: -A: invalid option`** - something took a
+  bash 4+ path on an old shell. The scripts check `BASH_VERSINFO` first, so this
+  means a new unguarded use slipped in; run `make lint` and `make test` under
+  `/bin/bash` on a Mac, which is the oldest shell supported.
+- **`unbound variable` on an empty array** - bash before 4.4 treats `"${arr[@]}"`
+  of an empty array as unset under `set -u`. Use `${arr[@]+"${arr[@]}"}`.
+- **A list or config file seems to be ignored on one machine only** - check for
+  CR LF line endings; the readers strip them, but a hand-rolled loop would not.
+- **`disk-alert.sh` reports a volume you do not care about** - add
+  `-x REGEX` or a `-c` file with a higher limit for that mount point.
+- **`db-backup-sqlserver.sh` cannot see the backups it made** - the destination
+  path is on the SQL Server host; `-k` only prunes when that directory is also
+  visible from where the script runs.
+- **`docs/usage.md` is stale (tests/test_docs.sh fails)** - run `make docs`.
+- **A test hangs** - the tail and timeout tests use real `sleep`; run one file
+  with `tests/run.sh -v NAME` to see which test it is in.
 
 ## Continuous integration
 

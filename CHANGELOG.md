@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026
+
+- `VERSION` file and `--version` on every script (1.0.0).
+- `backup.sh -z zstd`; `restore-backup.sh` reads `.tar.zst`.
+- `db-backup-mysql.sh -F` (option file, must be private).
+- `ssh-audit.sh -F [-y]` proposes or applies chmod fixes.
+- `tests/run.sh`: `-v`, `-f TEXT`, file patterns, quiet by default.
+- Fixed: `disk-alert.sh` reported macOS `devfs` and the automounter `map` as
+  100% full; pseudo filesystems are skipped by default (`-a`, `-x`).
+- Fixed: `retry.sh` restarted commands killed by SIGINT/SIGTERM.
+- Fixed: `json-get.sh` fallback mishandled escaped quotes and backslashes.
+
+## 2025
+
+- `healthcheck.sh -N` monitoring-plugin mode; `disk-alert.sh -j`.
+- `bootstrap-dotfiles.sh -u`; `saferm.sh -l` and `-R`; `rotate-logs.sh -P`.
+- `git-maint.sh -g` (commit-graph); `gen-systemd.sh -R`.
+- `backup.sh` reads the archive back before keeping it;
+  `db-backup-postgres.sh` runs `pg_isready` first.
+- `ssh-audit.sh` flags group/world-writable `authorized_keys` and `config`.
+- `tb_now_ms`, harness `assert_contains` family.
+- Fixed: files with CR LF line endings (targets, manifests, overrides, host
+  lists) left a trailing CR in the last field.
+
+## 2024
+
+- `healthcheck.sh -s/-x` TLS expiry; `tb_run_timeout`; `retry.sh -T`.
+- `ssh-audit.sh -j`; `git-stale-branches.sh -i`, `-C`; `json-get.sh -d`.
+- `tail-logs.sh` accepts directories; `bootstrap-dotfiles.sh` host overlays.
+- `backup.sh -X`; `db-backup-sqlserver.sh -s`, `-o`.
+- `docs/usage.md` generated from `--help` and tested.
+- Fixed: `backup.sh .` named the archive after the dot.
+
 ## 2023
 
 - `backup.sh` writes a SHA-256 file next to each archive; new `restore-backup.sh`
