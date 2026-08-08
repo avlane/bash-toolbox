@@ -10,7 +10,7 @@ test-verbose:
 
 # syntax check only; run shellcheck on top of this if you have it
 lint:
-	for f in bin/*.sh tests/*.sh; do bash -n $$f || exit 1; done
+	for f in bin/*.sh lib/*.sh tools/*.sh tests/*.sh; do bash -n $$f || exit 1; done
 
 # regenerate docs/usage.md after changing any script's --help text
 docs:

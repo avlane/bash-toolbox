@@ -59,7 +59,15 @@ sources it. Output is TAP-like (`ok - name` / `not ok - name`, with `# FAIL`
 detail lines and `# SKIP` for skipped tests). Tests use temporary directories
 and do not touch your home. External programs (`pg_dump`, `mysqldump`,
 `sqlcmd`, `curl`, `nc`) are replaced by small stubs placed first on `PATH`, so
-no database or network is needed.
+no database or network is needed. `tests/test_style.sh` greps for the house
+rules (strict mode, no backticks or `[ ]`, no GNU-only flags) as a cheap guard on
+machines without shellcheck; it does not replace shellcheck.
+
+```
+tests/run.sh                 # all files, quiet
+tests/run.sh -v retry        # one file, every test
+tests/run.sh -f dry_run      # tests whose name contains dry_run, in every file
+```
 
 ## Examples
 
